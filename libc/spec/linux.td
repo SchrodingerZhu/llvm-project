@@ -63,6 +63,28 @@ def Linux : StandardSpec<"Linux"> {
       [Macro<"MAP_ANONYMOUS">]
   >;
 
+  HeaderSpec SysRandom = HeaderSpec<
+      "sys/random.h",
+      [
+        Macro<"GRND_RANDOM">,
+        Macro<"GRND_NONBLOCK">,
+        Macro<"GRND_INSECURE">,
+      ],
+      [], // Types
+      [], // Enumerations
+      [
+        FunctionSpec<
+          "getrandom",
+          RetValSpec<SSizeTType>,
+          [
+            ArgSpec<VoidPtr>,
+            ArgSpec<SizeTType>,
+            ArgSpec<UnsignedIntType>
+          ]
+        >,
+      ]
+  >;
+
   HeaderSpec Signal = HeaderSpec<
       "signal.h",
       [
