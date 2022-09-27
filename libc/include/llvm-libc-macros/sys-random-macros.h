@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef __LLVM_LIBC_MACROS_SYS_STAT_MACROS_H
-#define __LLVM_LIBC_MACROS_SYS_STAT_MACROS_H
+#ifndef __LLVM_LIBC_MACROS_SYS_RANDOM_MACROS_H
+#define __LLVM_LIBC_MACROS_SYS_RANDOM_MACROS_H
 
 #ifdef __unix__
 #include "linux/sys-random-macros.h"
