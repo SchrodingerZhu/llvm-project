@@ -130,6 +130,7 @@ def Linux : StandardSpec<"Linux"> {
   let Headers = [
     Errno,
     SysMMan,
+    SysRandom,
     Signal,
   ];
 }
