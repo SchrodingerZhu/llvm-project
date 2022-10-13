@@ -26,6 +26,14 @@ template <typename T> static inline int correct_zero(T val, int bits) {
 }
 
 template <typename T> static inline int clz(T val);
+template <> inline int clz<unsigned short>(unsigned short val) {
+#if __has_builtin(__builtin_clzs)
+  return __builtin_clzs(val);
+#else
+  return __builtin_clz(static_cast<unsigned int>(val)) -
+         8 * (sizeof<unsigned int> - sizeof<unsigned short>);
+#endif
+}
 template <> inline int clz<unsigned int>(unsigned int val) {
   return __builtin_clz(val);
 }
@@ -37,6 +45,13 @@ template <> inline int clz<unsigned long long int>(unsigned long long int val) {
 }
 
 template <typename T> static inline int ctz(T val);
+template <> inline int ctz<unsigned short>(unsigned short val) {
+#if __has_builtin(__builtin_ctzs)
+  return __builtin_ctzs(val);
+#else
+  return __builtin_ctzs(static_cast<unsigned int>(val));
+#endif
+}
 template <> inline int ctz<unsigned int>(unsigned int val) {
   return __builtin_ctz(val);
 }

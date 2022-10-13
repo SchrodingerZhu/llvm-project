@@ -1,0 +1,69 @@
+add_libc_unittest(
+  safe_mem_size_test
+  SUITE
+    libc_support_unittests
+  SRCS
+    safe_mem_size_test.cpp
+  DEPENDS
+    libc.src.__support.swisstable
+    libc.src.__support.CPP.limits
+)
+
+add_libc_unittest(
+  bitmask_test
+  SUITE
+    libc_support_unittests
+  SRCS
+    bitmask_test.cpp
+  DEPENDS
+    libc.src.__support.swisstable
+)
+
+add_libc_unittest(
+  group_test
+  SUITE
+    libc_support_unittests
+  SRCS
+    group_test.cpp
+  COMPILE_OPTIONS
+    -DSWISSTABLE_TEST_USE_GENERIC_GROUP=0
+  DEPENDS
+    libc.src.__support.swisstable
+    libc.src.string.memcmp
+)
+
+add_libc_unittest(
+  group_generic_test
+  SUITE
+    libc_support_unittests
+  SRCS
+    group_test.cpp
+  COMPILE_OPTIONS
+    -DSWISSTABLE_TEST_USE_GENERIC_GROUP=1
+  DEPENDS
+    libc.src.__support.swisstable
+    libc.src.string.memcmp
+)
+
+add_header_library(
+  test_utils
+  HDRS
+    test_utils.h
+  DEPENDS
+    libc.include.stdlib
+    libc.src.string.memmove
+)
+
+add_libc_unittest(
+  hashtable_test
+  SUITE
+    libc_support_unittests
+  SRCS
+    hashtable_test.cpp
+  DEPENDS
+    .test_utils
+    libc.src.__support.swisstable
+    libc.src.stdlib.rand
+    libc.src.stdlib.srand
+    libc.src.sys.random.getrandom
+)
