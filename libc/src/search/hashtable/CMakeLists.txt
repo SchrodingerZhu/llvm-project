@@ -1,0 +1,30 @@
+add_header_library(
+  utils
+  HDRS
+    utils.h
+  DEPENDS
+    libc.src.__support.wyhash
+    libc.src.__support.swisstable
+    libc.src.string.strcmp
+    libc.src.string.strlen
+    libc.include.search
+)
+
+add_object_library(
+  global
+  SRCS
+    global.cpp 
+  HDRS
+    global.h
+  DEPENDS
+    .utils
+)
+
+add_header_library(
+  search_impl
+  HDRS
+    search_impl.h
+  DEPENDS
+    .utils
+    libc.include.errno
+)
