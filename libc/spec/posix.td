@@ -1008,6 +1008,71 @@ def POSIX : StandardSpec<"POSIX"> {
     ]
   >;
 
+  NamedType StructHsearchDataName = NamedType<"struct hsearch_data">;
+  PtrType StructHsearchDataNamePtr = PtrType<StructHsearchDataName>;
+  NamedType ActionType = NamedType<"ACTION">;
+  NamedType EntryType = NamedType<"ENTRY">;
+  PtrType EntryTypePtr = PtrType<EntryType>;
+  PtrType EntryTypePtrPtr = PtrType<EntryTypePtr>;
+
+  HeaderSpec Search = HeaderSpec<
+    "search.h",
+    [], // Macros
+    [
+        StructHsearchDataName,
+        ActionType,
+        EntryType
+    ], // Types
+    [], // Enumerations
+    [
+        FunctionSpec<
+            "hcreate",
+            RetValSpec<IntType>,
+            [
+                ArgSpec<SizeTType>
+            ]
+        >,
+        FunctionSpec<
+            "hcreate_r",
+            RetValSpec<IntType>,
+            [  
+                ArgSpec<SizeTType>, 
+                ArgSpec<StructHsearchDataNamePtr>
+            ]
+        >,
+        FunctionSpec<
+            "hdestroy",
+            RetValSpec<VoidType>,
+            [] // Args
+        >,
+        FunctionSpec<
+            "hdestroy_r",
+            RetValSpec<VoidType>,
+            [
+                ArgSpec<StructHsearchDataNamePtr>
+            ]
+        >,
+        FunctionSpec<
+            "hsearch",
+            RetValSpec<EntryTypePtr>,
+            [
+                ArgSpec<EntryType>, 
+                ArgSpec<ActionType>
+            ]
+        >,
+        FunctionSpec<
+            "hsearch_r",
+            RetValSpec<IntType>,
+            [
+                ArgSpec<EntryType>, 
+                ArgSpec<ActionType>,
+                ArgSpec<EntryTypePtrPtr>,
+                ArgSpec<StructHsearchDataNamePtr>
+            ]
+        >,
+    ]
+  >; 
+
   HeaderSpec StdIO = HeaderSpec<
       "stdio.h",
       [], // Macros
@@ -1267,6 +1332,7 @@ def POSIX : StandardSpec<"POSIX"> {
     PThread,
     Signal,
     Spawn,
+    Search,
     StdIO,
     StdLib,
     SysIOctl,

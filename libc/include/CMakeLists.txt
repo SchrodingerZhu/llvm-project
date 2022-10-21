@@ -241,6 +241,18 @@ add_gen_header(
     .llvm-libc-types.posix_spawn_file_actions_t
 )
 
+add_gen_header(
+  search
+  DEF_FILE search.h.def
+  GEN_HDR search.h
+  DEPENDS
+    .llvm_libc_common_h
+    .llvm-libc-types.action
+    .llvm-libc-types.struct_hsearch_data
+    .llvm-libc-types.entry
+    .llvm-libc-types.size_t
+)
+
 # TODO: Not all platforms will have a include/sys directory. Add the sys
 # directory and the targets for sys/*.h files conditional to the OS requiring
 # them.
