@@ -182,6 +182,15 @@ add_header_library(
     .uint
 )
 
+add_header_library(
+  wyhash
+  HDRS
+  wyhash.h
+  DEPENDS
+    .common
+    .uint128
+)
+
 add_subdirectory(FPUtil)
 add_subdirectory(OSUtil)
 add_subdirectory(StringUtil)

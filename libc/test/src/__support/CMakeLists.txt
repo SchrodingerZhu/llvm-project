@@ -21,6 +21,19 @@ add_libc_unittest(
 )
 
 add_libc_unittest(
+  wyhash_test
+  SUITE
+    libc_support_unittests
+  SRCS
+    wyhash_test.cpp
+  DEPENDS
+    libc.src.__support.wyhash
+    libc.src.string.strlen
+    libc.src.string.memset
+    libc.src.stdlib.rand
+)
+
+add_libc_unittest(
   high_precision_decimal_test
   SUITE
     libc_support_unittests
