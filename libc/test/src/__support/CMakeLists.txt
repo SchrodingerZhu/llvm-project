@@ -97,6 +97,17 @@ add_libc_unittest(
     libc.src.__support.fixedvector
 )
 
+add_libc_unittest(
+  builtin_wrappers_test
+  SUITE
+    libc_support_unittests
+  SRCS
+    builtin_wrappers_test.cpp
+  DEPENDS
+    libc.src.__support.builtin_wrappers
+    libc.src.__support.CPP.limits
+)
+
 add_executable(
   libc_str_to_float_comparison_test
   str_to_float_comparison_test.cpp

@@ -14,6 +14,18 @@
 #include "src/__support/CPP/type_traits.h"
 #include "src/__support/compiler_features.h"
 
+#if defined __has_builtin
+#if __has_builtin(__builtin_clzs)
+#define LLVM_LIBC_HAS_BUILTIN_CLZS
+#endif
+#endif
+
+#if defined __has_builtin
+#if __has_builtin(__builtin_ctzs)
+#define LLVM_LIBC_HAS_BUILTIN_CTZS
+#endif
+#endif
+
 namespace __llvm_libc {
 
 // The following overloads are matched based on what is accepted by
@@ -30,6 +42,14 @@ template <typename T> static inline int correct_zero(T val, int bits) {
 }
 
 template <typename T> static inline int clz(T val);
+template <> inline int clz<unsigned short>(unsigned short val) {
+#if defined LLVM_LIBC_HAS_BUILTIN_CLZS
+  return __builtin_clzs(val);
+#else
+  return __builtin_clz(static_cast<unsigned int>(val)) -
+         8 * (sizeof(unsigned int) - sizeof(unsigned short));
+#endif
+}
 template <> inline int clz<unsigned int>(unsigned int val) {
   return __builtin_clz(val);
 }
@@ -41,6 +61,13 @@ template <> inline int clz<unsigned long long int>(unsigned long long int val) {
 }
 
 template <typename T> static inline int ctz(T val);
+template <> inline int ctz<unsigned short>(unsigned short val) {
+#if defined LLVM_LIBC_HAS_BUILTIN_CTZS
+  return __builtin_ctzs(val);
+#else
+  return __builtin_ctz(static_cast<unsigned int>(val));
+#endif
+}
 template <> inline int ctz<unsigned int>(unsigned int val) {
   return __builtin_ctz(val);
 }
