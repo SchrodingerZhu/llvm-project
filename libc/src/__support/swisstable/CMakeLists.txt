@@ -14,3 +14,12 @@ add_header_library(
   DEPENDS
     libc.src.__support.builtin_wrappers
 )
+
+add_header_library(
+  safe_mem_size
+  HDRS
+    safe_mem_size.h
+  DEPENDS
+    libc.src.__support.CPP.limits
+    libc.src.__support.common
+)

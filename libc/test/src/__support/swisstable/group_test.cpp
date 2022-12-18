@@ -1,4 +1,3 @@
-#include <stddef.h>
 #if SWISSTABLE_TEST_USE_GENERIC_GROUP
 #include "src/__support/swisstable/generic.h"
 #define SWISSTABLE_TEST_SUITE(X) TEST(LlvmLibcSwissTableGroupGeneric, X)
@@ -8,7 +7,6 @@
 #endif
 #include "src/string/memcmp.h"
 #include "utils/UnitTest/LibcTest.h"
-#include <stdint.h>
 
 namespace __llvm_libc::internal::swisstable {
 

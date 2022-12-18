@@ -1,7 +1,5 @@
 #include "src/__support/swisstable/dispatch.h"
 #include "utils/UnitTest/LibcTest.h"
-#include <fcntl.h>
-#include <stdio.h>
 namespace __llvm_libc::internal::swisstable {
 
 using ShortBitMask = BitMaskAdaptor<uint16_t, 0xffff, 1>;

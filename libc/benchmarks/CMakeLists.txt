@@ -119,7 +119,7 @@ add_library(json
     EXCLUDE_FROM_ALL
     JSON.cpp
     JSON.h
-)
+        ../src/__support/swisstable/safe_mem_size.h)
 target_link_libraries(json PUBLIC libc-memory-benchmark)
 llvm_update_compile_flags(json)
 

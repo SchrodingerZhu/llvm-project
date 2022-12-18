@@ -33,3 +33,37 @@ add_libc_unittest(
     libc.src.string.memcmp
     libc.src.__support.swisstable.dispatch
 )
+
+
+add_libc_unittest(
+  safe_mem_size_test
+  SUITE
+    libc_support_unittests
+  SRCS
+    safe_mem_size_test.cpp
+  DEPENDS
+    libc.src.__support.swisstable.safe_mem_size
+)
+
+add_header_library(
+  test_utils
+  HDRS
+    test_utils.h
+  DEPENDS
+    libc.include.stdlib
+    libc.src.string.memmove
+)
+
+add_libc_unittest(
+  hashtable_test
+  SUITE
+    libc_support_unittests
+  SRCS
+    hashtable_test.cpp
+  DEPENDS
+    .test_utils
+    libc.src.__support.swisstable
+    libc.src.stdlib.rand
+    libc.src.stdlib.srand
+    libc.src.sys.random.getrandom
+)

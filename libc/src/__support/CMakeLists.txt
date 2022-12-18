@@ -191,6 +191,20 @@ add_header_library(
     .uint128
 )
 
+add_header_library(
+  swisstable
+  HDRS
+    swisstable.h
+  DEPENDS
+    .common
+    .builtin_wrappers
+    .swisstable.dispatch
+    .swisstable.safe_mem_size
+    libc.src.string.memcpy
+    libc.src.string.memset
+    libc.include.stdlib
+)
+
 add_subdirectory(FPUtil)
 add_subdirectory(OSUtil)
 add_subdirectory(StringUtil)
