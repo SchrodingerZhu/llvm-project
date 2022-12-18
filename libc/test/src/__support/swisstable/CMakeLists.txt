@@ -1,0 +1,35 @@
+add_libc_unittest(
+  bitmask_test
+  SUITE
+    libc_support_unittests
+  SRCS
+    bitmask_test.cpp
+  DEPENDS
+    libc.src.__support.swisstable.dispatch
+)
+
+add_libc_unittest(
+  group_test
+  SUITE
+    libc_support_unittests
+  SRCS
+    group_test.cpp
+  COMPILE_OPTIONS
+    -DSWISSTABLE_TEST_USE_GENERIC_GROUP=0
+  DEPENDS
+    libc.src.string.memcmp
+    libc.src.__support.swisstable.dispatch
+)
+
+add_libc_unittest(
+  group_generic_test
+  SUITE
+    libc_support_unittests
+  SRCS
+    group_test.cpp
+  COMPILE_OPTIONS
+    -DSWISSTABLE_TEST_USE_GENERIC_GROUP=1
+  DEPENDS
+    libc.src.string.memcmp
+    libc.src.__support.swisstable.dispatch
+)

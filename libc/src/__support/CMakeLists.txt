@@ -200,3 +200,4 @@ add_subdirectory(StringUtil)
 add_subdirectory(threads)
 
 add_subdirectory(File)
+add_subdirectory(swisstable)
