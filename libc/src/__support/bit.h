@@ -28,6 +28,14 @@ template <typename T> LIBC_INLINE int constexpr correct_zero(T val, int bits) {
 }
 
 template <typename T> LIBC_INLINE constexpr int clz(T val);
+template <> LIBC_INLINE int clz<unsigned char>(unsigned char val) {
+  return __builtin_clz(static_cast<unsigned int>(val)) -
+         8 * (sizeof(unsigned int) - sizeof(unsigned char));
+}
+template <> LIBC_INLINE int clz<unsigned short>(unsigned short val) {
+  return __builtin_clz(static_cast<unsigned int>(val)) -
+         8 * (sizeof(unsigned int) - sizeof(unsigned short));
+}
 template <> LIBC_INLINE int clz<unsigned int>(unsigned int val) {
   return __builtin_clz(val);
 }
@@ -42,6 +50,12 @@ clz<unsigned long long int>(unsigned long long int val) {
 }
 
 template <typename T> LIBC_INLINE constexpr int ctz(T val);
+template <> LIBC_INLINE int ctz<unsigned char>(unsigned char val) {
+  return __builtin_ctz(static_cast<unsigned int>(val));
+}
+template <> LIBC_INLINE int ctz<unsigned short>(unsigned short val) {
+  return __builtin_ctz(static_cast<unsigned int>(val));
+}
 template <> LIBC_INLINE int ctz<unsigned int>(unsigned int val) {
   return __builtin_ctz(val);
 }
@@ -70,6 +84,21 @@ template <typename T> LIBC_INLINE constexpr int safe_clz(T val) {
 
 template <typename T> LIBC_INLINE constexpr int unsafe_clz(T val) {
   return __internal::clz(val);
+}
+
+template <typename T> LIBC_INLINE constexpr T next_power_of_two(T val) {
+  if (val == 0)
+    return 1;
+  T idx = safe_clz(val - 1);
+  return static_cast<T>(1) << ((8ull * sizeof(T)) - idx);
+}
+
+template <typename T> LIBC_INLINE constexpr bool is_power_of_two(T val) {
+  return val != 0 && (val & (val - 1)) == 0;
+}
+
+template <typename T> LIBC_INLINE constexpr T offset_to(T val, T align) {
+  return (-val) & (align - 1);
 }
 
 } // namespace LIBC_NAMESPACE

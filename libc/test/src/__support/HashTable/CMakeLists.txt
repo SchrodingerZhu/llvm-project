@@ -1,0 +1,67 @@
+add_libc_test(
+  bitmask_test
+  SUITE
+    libc-support-tests
+  SRCS
+    bitmask_test.cpp
+  DEPENDS
+    libc.src.__support.HashTable.bitmask
+    libc.include.stdlib
+)
+add_libc_test(
+  table_test
+  SUITE
+    libc-support-tests
+  SRCS
+    table_test.cpp
+  DEPENDS
+    libc.src.__support.HashTable.randomness
+    libc.src.__support.HashTable.table
+    libc.src.__support.common
+  UNIT_TEST_ONLY
+)
+cpu_supports(CPU_SUPPORTS_SSE2 "SSE2")
+if (CPU_SUPPORTS_SSE2)
+  add_libc_test(
+    group_test_sse2
+    SUITE
+      libc-support-tests
+    SRCS
+      group_test.cpp
+    DEPENDS
+      libc.src.__support.HashTable.bitmask
+      libc.include.stdlib
+      libc.src.string.memcmp
+    COMPILE_OPTIONS
+      ${LIBC_COMPILE_OPTIONS_NATIVE}
+    UNIT_TEST_ONLY
+  )
+  add_libc_test(
+    group_test
+    SUITE
+      libc-support-tests
+    SRCS
+      group_test.cpp
+    DEPENDS
+      libc.src.__support.HashTable.bitmask
+      libc.include.stdlib
+      libc.src.string.memcmp
+    COMPILE_OPTIONS
+      -mno-sse2 -mtune=generic
+    UNIT_TEST_ONLY
+  )
+else()
+  add_libc_test(
+    group_test
+    SUITE
+      libc-support-tests
+    SRCS
+      group_test.cpp
+    DEPENDS
+      libc.src.__support.HashTable.bitmask
+      libc.include.stdlib
+      libc.src.string.memcmp
+    UNIT_TEST_ONLY
+  )
+  message(STATUS "Skipping test for libc.test.src.__support.HashTable.group_test_sse2: insufficient host cpu features 'SSE2'")
+endif()
