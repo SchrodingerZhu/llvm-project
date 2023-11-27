@@ -10,6 +10,7 @@
 #define LLVM_LIBC_SRC___SUPPORT_HASHTABLE_table_H
 
 #include "include/llvm-libc-types/ENTRY.h"
+#include "src/__support/CPP/new.h"
 #include "src/__support/CPP/type_traits.h"
 #include "src/__support/HashTable/bitmask.h"
 #include "src/__support/bit.h"
@@ -22,12 +23,11 @@
 #include "src/string/strlen.h"
 #include <stddef.h>
 #include <stdint.h>
-#include <stdlib.h>
 
 namespace LIBC_NAMESPACE {
 namespace internal {
 
-static LIBC_INLINE uint8_t secondary_hash(uint64_t hash) {
+LIBC_INLINE uint8_t secondary_hash(uint64_t hash) {
   // top 7 bits of the hash.
   return static_cast<uint8_t>((hash >> 57) & 0x7f);
 }
@@ -50,7 +50,7 @@ struct ProbeSequence {
   size_t stride;
   size_t entries_mask;
 
-  size_t next() {
+  LIBC_INLINE size_t next() {
     position += stride;
     position &= entries_mask;
     stride += sizeof(Group);
@@ -62,7 +62,7 @@ struct ProbeSequence {
 // need to do the fixup when we set the control bytes.
 // The number of entries is at least 8: we don't have to worry
 // about special sizes when check the fullness of the table.
-static LIBC_INLINE size_t capacity_to_entries(size_t cap) {
+LIBC_INLINE size_t capacity_to_entries(size_t cap) {
   if (8 >= sizeof(Group) && cap < 8)
     return 8;
   if (16 >= sizeof(Group) && cap < 15)
@@ -92,46 +92,50 @@ struct HashTable {
   size_t available_slots; // less than capacity
 private:
   // How many entries are there in the table.
-  size_t num_of_entries() const { return entries_mask + 1; }
+  LIBC_INLINE size_t num_of_entries() const { return entries_mask + 1; }
 
-  bool is_full() const { return available_slots == 0; }
+  LIBC_INLINE bool is_full() const { return available_slots == 0; }
 
-  size_t offset_from_entries() const {
+  LIBC_INLINE size_t offset_from_entries() const {
     size_t entries_size = num_of_entries() * sizeof(ENTRY);
-    return entries_size + offset_to(entries_size, alignof(HashTable));
+    return entries_size + offset_to(entries_size, table_alignment());
   }
 
-  constexpr static size_t table_alignment() {
+  LIBC_INLINE constexpr static size_t table_alignment() {
     return alignof(HashTable) > alignof(ENTRY) ? alignof(HashTable)
                                                : alignof(ENTRY);
   }
 
-  constexpr static size_t offset_to_groups() { return sizeof(HashTable); }
+  LIBC_INLINE constexpr static size_t offset_to_groups() {
+    return sizeof(HashTable);
+  }
 
-  ENTRY &entry(size_t i) { return reinterpret_cast<ENTRY *>(this)[-i - 1]; }
+  LIBC_INLINE ENTRY &entry(size_t i) {
+    return reinterpret_cast<ENTRY *>(this)[-i - 1];
+  }
 
-  uint8_t &control(size_t i) {
+  LIBC_INLINE uint8_t &control(size_t i) {
     uint8_t *ptr = reinterpret_cast<uint8_t *>(this) + offset_to_groups();
     return ptr[i];
   }
 
   // We duplicate a group of control bytes to the end. Thus, it is possible that
   // we need to set two control bytes at the same time.
-  void set_ctrl(size_t index, uint8_t value) {
+  LIBC_INLINE void set_ctrl(size_t index, uint8_t value) {
     size_t index2 = ((index - sizeof(Group)) & entries_mask) + sizeof(Group);
     control(index) = value;
     control(index2) = value;
   }
 
 public:
-  static void deallocate(HashTable *table) {
+  LIBC_INLINE static void deallocate(HashTable *table) {
     if (table) {
       void *ptr =
           reinterpret_cast<uint8_t *>(table) - table->offset_from_entries();
-      free(ptr);
+      operator delete(ptr, std::align_val_t{table_alignment()});
     }
   }
-  static HashTable *allocate(size_t capacity, uint64_t randomness) {
+  LIBC_INLINE static HashTable *allocate(size_t capacity, uint64_t randomness) {
     // check if capacity_to_entries overflows MAX_MEM_SIZE
     if (capacity > size_t{1} << (8 * sizeof(size_t) - 1 - 3))
       return nullptr;
@@ -144,12 +148,14 @@ public:
         (align_boundary + header_size + ctrl_sizes).align_up(table_alignment());
     if (!total_size.valid())
       return nullptr;
-    void *mem =
-        aligned_alloc(table_alignment(), static_cast<size_t>(total_size));
+    AllocChecker ac;
+
+    void *mem = operator new(total_size, std::align_val_t{table_alignment()},
+                             ac);
 
     HashTable *table = reinterpret_cast<HashTable *>(
         static_cast<uint8_t *>(mem) + align_boundary);
-    if (mem) {
+    if (ac) {
       table->entries_mask = entries - 1u;
       table->available_slots = entries / 8 * 7;
       table->state = HashState{randomness};
@@ -160,7 +166,7 @@ public:
   }
 
 private:
-  size_t find(const char *key, uint64_t primary) {
+  LIBC_INLINE size_t find(const char *key, uint64_t primary) {
     uint8_t secondary = secondary_hash(primary);
     ProbeSequence sequence{static_cast<size_t>(primary), 0, entries_mask};
     while (true) {
@@ -187,7 +193,7 @@ private:
   }
 
 private:
-  ENTRY *insert(ENTRY item, uint64_t primary) {
+  LIBC_INLINE ENTRY *insert(ENTRY item, uint64_t primary) {
     auto index = find(item.key, primary);
     auto slot = &this->entry(index);
     // SVr4 and POSIX.1-2001 specify that action is significant only for
@@ -207,7 +213,7 @@ private:
   }
 
 public:
-  ENTRY *find(const char *key) {
+  LIBC_INLINE ENTRY *find(const char *key) {
     LIBC_NAMESPACE::internal::HashState hasher = state;
     hasher.update(key, strlen(key));
     uint64_t primary = hasher.finish();
@@ -216,7 +222,7 @@ public:
       return nullptr;
     return &entry;
   }
-  ENTRY *insert(ENTRY item) {
+  LIBC_INLINE ENTRY *insert(ENTRY item) {
     LIBC_NAMESPACE::internal::HashState hasher = state;
     hasher.update(item.key, strlen(item.key));
     uint64_t primary = hasher.finish();

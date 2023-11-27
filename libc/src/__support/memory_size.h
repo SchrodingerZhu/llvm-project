@@ -14,7 +14,7 @@
 
 namespace LIBC_NAMESPACE {
 namespace internal {
-template <class T> LIBC_INLINE static bool mul_overflow(T a, T b, T *res) {
+template <class T> LIBC_INLINE bool mul_overflow(T a, T b, T *res) {
 #if defined(__has_builtin) && __has_builtin(__builtin_mul_overflow)
   return __builtin_mul_overflow(a, b, res);
 #else
@@ -32,23 +32,23 @@ class SafeMemSize {
 private:
   using type = cpp::make_signed_t<size_t>;
   type value;
-  explicit SafeMemSize(type value) : value(value) {}
+  LIBC_INLINE explicit SafeMemSize(type value) : value(value) {}
 
 public:
-  static constexpr size_t MAX_MEM_SIZE =
+  LIBC_INLINE_VAR static constexpr size_t MAX_MEM_SIZE =
       static_cast<size_t>(cpp::numeric_limits<type>::max());
-  explicit SafeMemSize(size_t value)
+  LIBC_INLINE explicit SafeMemSize(size_t value)
       : value(value <= MAX_MEM_SIZE ? static_cast<type>(value) : -1) {}
-  operator size_t() { return static_cast<size_t>(value); }
-  bool valid() { return value >= 0; }
-  SafeMemSize operator+(const SafeMemSize &other) {
+  LIBC_INLINE operator size_t() { return static_cast<size_t>(value); }
+  LIBC_INLINE bool valid() { return value >= 0; }
+  LIBC_INLINE SafeMemSize operator+(const SafeMemSize &other) {
     type result;
     if (LIBC_UNLIKELY((value | other.value) < 0))
       result = -1;
     result = value + other.value;
     return SafeMemSize{result};
   }
-  SafeMemSize operator*(const SafeMemSize &other) {
+  LIBC_INLINE SafeMemSize operator*(const SafeMemSize &other) {
     type result;
     if (LIBC_UNLIKELY((value | other.value) < 0))
       result = -1;
@@ -56,7 +56,7 @@ public:
       result = -1;
     return SafeMemSize{result};
   }
-  SafeMemSize align_up(size_t alignment) {
+  LIBC_INLINE SafeMemSize align_up(size_t alignment) {
     if (!is_power_of_two(alignment) || alignment > MAX_MEM_SIZE || !valid())
       return SafeMemSize{type{-1}};
 

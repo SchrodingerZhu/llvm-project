@@ -19,7 +19,7 @@ namespace internal {
 // Folded multiplication.
 // This function multiplies two 64-bit integers and xor the high and
 // low 64-bit parts of the result.
-LIBC_INLINE static uint64_t folded_multiply(uint64_t x, uint64_t y) {
+LIBC_INLINE uint64_t folded_multiply(uint64_t x, uint64_t y) {
   UInt128 mask = static_cast<UInt128>(0xffffffffffffffff);
   UInt128 p = static_cast<UInt128>(x) * static_cast<UInt128>(y);
   uint64_t low = static_cast<uint64_t>(p & mask);
@@ -30,7 +30,7 @@ LIBC_INLINE static uint64_t folded_multiply(uint64_t x, uint64_t y) {
 // Read as little endian.
 // Shift-and-or implementation does not give a satisfactory code on aarch64.
 // Therefore, we use a union to read the value.
-template <typename T> LIBC_INLINE static T read_little_endian(const void *ptr) {
+template <typename T> LIBC_INLINE T read_little_endian(const void *ptr) {
   const uint8_t *bytes = static_cast<const uint8_t *>(ptr);
   union {
     T value;
@@ -50,8 +50,8 @@ template <typename T> LIBC_INLINE static T read_little_endian(const void *ptr) {
 }
 
 // Specialized read functions for small values. size must be <= 8.
-LIBC_INLINE static void read_small_values(const void *ptr, size_t size,
-                                          uint64_t &low, uint64_t &high) {
+LIBC_INLINE void read_small_values(const void *ptr, size_t size, uint64_t &low,
+                                   uint64_t &high) {
   const uint8_t *bytes = static_cast<const uint8_t *>(ptr);
   if (size >= 2) {
     if (size >= 4) {
@@ -74,19 +74,19 @@ LIBC_INLINE static void read_small_values(const void *ptr, size_t size,
 }
 
 // This constant comes from Kunth's prng (it empirically works well).
-LIBC_INLINE_VAR static constexpr uint64_t MULTIPLE = 6364136223846793005;
+LIBC_INLINE_VAR constexpr uint64_t MULTIPLE = 6364136223846793005;
 // Rotation amount for mixing.
-LIBC_INLINE_VAR static constexpr uint64_t ROTATE = 23;
+LIBC_INLINE_VAR constexpr uint64_t ROTATE = 23;
 
 // Randomly generated values (for now, it uses the same values as in aHash).
-LIBC_INLINE_VAR static constexpr uint64_t RANDOMNESS[2][4] = {
+LIBC_INLINE_VAR constexpr uint64_t RANDOMNESS[2][4] = {
     {0x243f6a8885a308d3, 0x13198a2e03707344, 0xa4093822299f31d0,
      0x082efa98ec4e6c89},
     {0x452821e638d01377, 0xbe5466cf34e90c6c, 0xc0ac29b7c97c50dd,
      0x3f84d5b5b5470917},
 };
 
-LIBC_INLINE static uint64_t rotate_left(uint64_t x, uint64_t y) {
+LIBC_INLINE uint64_t rotate_left(uint64_t x, uint64_t y) {
   return (x << y) | (x >> (64 - y));
 }
 
@@ -97,13 +97,13 @@ class HashState {
   uint64_t buffer;
   uint64_t pad;
   uint64_t extra_keys[2];
-  void update(uint64_t low, uint64_t high) {
+  LIBC_INLINE void update(uint64_t low, uint64_t high) {
     uint64_t combined =
         folded_multiply(low ^ extra_keys[0], high ^ extra_keys[1]);
     buffer = (buffer + pad) ^ combined;
     buffer = rotate_left(buffer, ROTATE);
   }
-  static uint64_t mix(uint64_t seed) {
+  LIBC_INLINE static uint64_t mix(uint64_t seed) {
     HashState mixer{RANDOMNESS[0][0], RANDOMNESS[0][1], RANDOMNESS[0][2],
                     RANDOMNESS[0][3]};
     mixer.update(seed, 0);
@@ -111,9 +111,10 @@ class HashState {
   }
 
 public:
-  constexpr HashState(uint64_t a, uint64_t b, uint64_t c, uint64_t d)
+  LIBC_INLINE constexpr HashState(uint64_t a, uint64_t b, uint64_t c,
+                                  uint64_t d)
       : buffer(a), pad(b), extra_keys{c, d} {}
-  HashState(uint64_t seed) {
+  LIBC_INLINE HashState(uint64_t seed) {
     // Mix one more round of the seed to make it stronger.
     uint64_t mixed = mix(seed);
     buffer = RANDOMNESS[1][0] ^ mixed;
@@ -121,7 +122,7 @@ public:
     extra_keys[0] = RANDOMNESS[1][2] ^ mixed;
     extra_keys[1] = RANDOMNESS[1][3] ^ mixed;
   }
-  void update(const void *ptr, size_t size) {
+  LIBC_INLINE void update(const void *ptr, size_t size) {
     uint8_t const *bytes = static_cast<const uint8_t *>(ptr);
     buffer = (buffer + size) * MULTIPLE;
     uint64_t low, high;
@@ -148,7 +149,7 @@ public:
       update(low, high);
     }
   }
-  uint64_t finish() {
+  LIBC_INLINE uint64_t finish() {
     uint64_t rot = buffer & 63;
     uint64_t folded = folded_multiply(buffer, pad);
     return rotate_left(folded, rot);

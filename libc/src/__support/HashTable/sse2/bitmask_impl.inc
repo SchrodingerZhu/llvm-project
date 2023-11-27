@@ -19,19 +19,19 @@ struct Group {
   __m128i data;
 
   // Load a group of control words from an arbitary address.
-  static Group load(const void *__restrict addr) {
+  LIBC_INLINE static Group load(const void *__restrict addr) {
     return {_mm_loadu_si128(static_cast<const __m128i *>(addr))};
   }
 
   // Find out the lanes equal to the given byte and return the bitmask
   // with corresponding bits set.
-  IteratableBitMask match_byte(uint8_t byte) const {
+  LIBC_INLINE IteratableBitMask match_byte(uint8_t byte) const {
     auto cmp = _mm_cmpeq_epi8(data, _mm_set1_epi8(byte));
     auto bitmask = static_cast<uint16_t>(_mm_movemask_epi8(cmp));
     return {bitmask};
   }
 
-  BitMask mask_available() const {
+  LIBC_INLINE BitMask mask_available() const {
     auto bitmask = static_cast<uint16_t>(_mm_movemask_epi8(data));
     return {bitmask};
   }

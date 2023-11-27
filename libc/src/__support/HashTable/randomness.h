@@ -20,12 +20,12 @@
 namespace LIBC_NAMESPACE {
 namespace internal {
 namespace randomness {
-LIBC_INLINE_VAR thread_local static HashState state = {
+LIBC_INLINE_VAR thread_local HashState state = {
     0x38049a7ea6f5a79b, 0x45cb02147c3f718a, 0x53eb431c12770718,
     0x5b55742bd20a2fcb};
-LIBC_INLINE_VAR thread_local static uint64_t counter = 0;
-LIBC_INLINE_VAR constexpr static uint64_t RESEED_PERIOD = 1024;
-static LIBC_INLINE uint64_t next_random_seed() {
+LIBC_INLINE_VAR thread_local uint64_t counter = 0;
+LIBC_INLINE_VAR constexpr uint64_t RESEED_PERIOD = 1024;
+LIBC_INLINE uint64_t next_random_seed() {
   if (counter % RESEED_PERIOD == 0) {
     uint64_t entropy[2];
     entropy[0] = reinterpret_cast<uint64_t>(&entropy);

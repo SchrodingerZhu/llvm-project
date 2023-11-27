@@ -32,18 +32,18 @@ namespace internal {
 // =============================
 template <typename T, T WORD_MASK, size_t WORD_STRIDE> struct BitMaskAdaptor {
   // A masked constant whose bits are all set.
-  constexpr static inline T MASK = WORD_MASK;
+  LIBC_INLINE_VAR constexpr static T MASK = WORD_MASK;
   // A stride in the bitmask may use multiple bits.
-  constexpr static inline size_t STRIDE = WORD_STRIDE;
+  LIBC_INLINE_VAR constexpr static size_t STRIDE = WORD_STRIDE;
 
   T word;
 
   // Check if any bit is set inside the word.
-  bool any_bit_set() const { return word != 0; }
+  LIBC_INLINE bool any_bit_set() const { return word != 0; }
 
   // Count trailing zeros with respect to stride. (Assume the bitmask is none
   // zero.)
-  size_t lowest_set_bit_nonzero() const {
+  LIBC_INLINE size_t lowest_set_bit_nonzero() const {
     return unsafe_ctz<T>(word) / WORD_STRIDE;
   }
 };
@@ -54,7 +54,7 @@ template <class BitMask> struct IteratableBitMaskAdaptor : public BitMask {
   // Use the bitmask as an iterator. Update the state and return current lowest
   // set bit. To make the bitmask iterable, each stride must contain 0 or exact
   // 1 set bit.
-  void remove_lowest_bit() {
+  LIBC_INLINE void remove_lowest_bit() {
     // Remove the last set bit inside the word:
     //    word              = 011110100 (original value)
     //    word - 1          = 011110011 (invert all bits up to the last set bit)
@@ -64,17 +64,19 @@ template <class BitMask> struct IteratableBitMaskAdaptor : public BitMask {
   using value_type = size_t;
   using iterator = BitMask;
   using const_iterator = BitMask;
-  size_t operator*() const { return this->lowest_set_bit_nonzero(); }
-  IteratableBitMaskAdaptor &operator++() {
+  LIBC_INLINE size_t operator*() const {
+    return this->lowest_set_bit_nonzero();
+  }
+  LIBC_INLINE IteratableBitMaskAdaptor &operator++() {
     this->remove_lowest_bit();
     return *this;
   }
-  IteratableBitMaskAdaptor begin() { return *this; }
-  IteratableBitMaskAdaptor end() { return {0}; }
-  bool operator==(const IteratableBitMaskAdaptor &other) {
+  LIBC_INLINE IteratableBitMaskAdaptor begin() { return *this; }
+  LIBC_INLINE IteratableBitMaskAdaptor end() { return {0}; }
+  LIBC_INLINE bool operator==(const IteratableBitMaskAdaptor &other) {
     return this->word == other.word;
   }
-  bool operator!=(const IteratableBitMaskAdaptor &other) {
+  LIBC_INLINE bool operator!=(const IteratableBitMaskAdaptor &other) {
     return this->word != other.word;
   }
 };

@@ -134,7 +134,8 @@ add_libc_test(
     hash_test.cpp
   DEPENDS
     libc.src.__support.hash
-    libc.include.stdlib
+    libc.src.__support.CPP.new
+    libc.src.stdlib.rand
   UNIT_TEST_ONLY
     # Aligned Allocation is not supported in hermetic builds.
 )

@@ -16,7 +16,7 @@ namespace internal {
 //    byte | (byte << 8)    = 0x000000000000ffff
 //    byte | (byte << 16)   = 0x00000000ffffffff
 //    byte | (byte << 32)   = 0xffffffffffffffff
-constexpr static inline uintptr_t repeat_byte(uintptr_t byte) {
+LIBC_INLINE constexpr uintptr_t repeat_byte(uintptr_t byte) {
   size_t shift_amount = 8;
   while (shift_amount < sizeof(uintptr_t) * 8) {
     byte |= byte << shift_amount;
@@ -32,7 +32,7 @@ struct Group {
   uintptr_t data;
 
   // Load a group of control words from an arbitary address.
-  static Group load(const void *__restrict addr) {
+  LIBC_INLINE static Group load(const void *__restrict addr) {
     union {
       uintptr_t value;
       char bytes[sizeof(uintptr_t)];
@@ -44,7 +44,7 @@ struct Group {
 
   // Find out the lanes equal to the given byte and return the bitmask
   // with corresponding bits set.
-  IteratableBitMask match_byte(uint8_t byte) const {
+  LIBC_INLINE IteratableBitMask match_byte(uint8_t byte) const {
     // Given byte = 0x10, suppose the data is:
     //
     //       data = [ 0x10 | 0x10 | 0x00 | 0xF1 | ... ]
@@ -94,7 +94,7 @@ struct Group {
 
   // Find out the lanes equal to EMPTY or DELETE (highest bit set) and
   // return the bitmask with corresponding bits set.
-  BitMask mask_available() const {
+  LIBC_INLINE BitMask mask_available() const {
     return {LIBC_NAMESPACE::Endian::to_little_endian(data) & repeat_byte(0x80)};
   }
 };

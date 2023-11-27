@@ -25,13 +25,13 @@ add_header_library(
     libc.src.__support.memory_size
     libc.src.__support.bit
     libc.src.__support.CPP.type_traits
+    libc.src.__support.CPP.new
     libc.src.__support.macros.attributes
     libc.src.__support.macros.optimization
     libc.src.__support.hash
     libc.src.string.memset
     libc.src.string.strcmp
     libc.src.string.strlen
-    libc.include.stdlib
     libc.include.llvm-libc-types.ENTRY
 )
 
