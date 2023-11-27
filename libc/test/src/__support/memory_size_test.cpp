@@ -8,7 +8,6 @@
 
 #include "src/__support/memory_size.h"
 #include "test/UnitTest/Test.h"
-#include <cstddef>
 
 namespace LIBC_NAMESPACE {
 namespace internal {

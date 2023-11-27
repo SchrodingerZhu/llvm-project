@@ -8,10 +8,10 @@
 
 #include "src/__support/HashTable/bitmask.h"
 
+#include "src/stdlib/rand.h"
 #include "src/string/memcmp.h"
 #include "test/UnitTest/Test.h"
 #include <stdint.h>
-#include <stdlib.h>
 
 namespace LIBC_NAMESPACE {
 namespace internal {

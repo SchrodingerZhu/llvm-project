@@ -9,9 +9,9 @@
 #include "src/__support/CPP/new.h"
 #include "src/__support/hash.h"
 #include "src/stdlib/rand.h"
+#include "src/stdlib/srand.h"
+#include "src/string/memset.h"
 #include "test/UnitTest/Test.h"
-#include <stddef.h>
-#include <string.h>
 
 template <class T> struct AlignedMemory {
   T *data;
@@ -38,14 +38,14 @@ TEST(LlvmLibcHashTest, SanityCheck) {
       uint64_t hash;
       {
         AlignedMemory<char> mem(sz, 64, 0);
-        memset(mem.data, val, sz);
+        LIBC_NAMESPACE::memset(mem.data, val, sz);
         LIBC_NAMESPACE::internal::HashState state{0x1234567890abcdef};
         state.update(mem.data, sz);
         hash = state.finish();
       }
       for (size_t offset = 1; offset < 64; ++offset) {
         AlignedMemory<char> mem(sz, 64, offset);
-        memset(mem.data, val, sz);
+        LIBC_NAMESPACE::memset(mem.data, val, sz);
         LIBC_NAMESPACE::internal::HashState state{0x1234567890abcdef};
         state.update(mem.data, sz);
         ASSERT_EQ(hash, state.finish());
@@ -70,7 +70,7 @@ TEST(LlvmLibcHashTest, Avalanche) {
     for (uint8_t val : values) {
       uint64_t hash;
       AlignedMemory<char> mem(sz, 64, 0);
-      memset(mem.data, val, sz);
+      LIBC_NAMESPACE::memset(mem.data, val, sz);
       {
         LIBC_NAMESPACE::internal::HashState state{0xabcdef1234567890};
         state.update(mem.data, sz);
@@ -96,13 +96,15 @@ TEST(LlvmLibcHashTest, Avalanche) {
 // Hash a random sequence of input. The LSB should be uniform enough such that
 // values spread across the entire range.
 TEST(LlvmLibcHashTest, UniformLSB) {
-  srand(0);
+  LIBC_NAMESPACE::srand(0xffffffff);
   for (size_t sz : sizes) {
     AlignedMemory<size_t> counters(sz, sizeof(size_t), 0);
-    memset(counters.data, 0, sz * sizeof(size_t));
+    LIBC_NAMESPACE::memset(counters.data, 0, sz * sizeof(size_t));
     for (size_t i = 0; i < 200 * sz; ++i) {
-      int randomness[8] = {rand(), rand(), rand(), rand(),
-                           rand(), rand(), rand(), rand()};
+      int randomness[8] = {LIBC_NAMESPACE::rand(), LIBC_NAMESPACE::rand(),
+                           LIBC_NAMESPACE::rand(), LIBC_NAMESPACE::rand(),
+                           LIBC_NAMESPACE::rand(), LIBC_NAMESPACE::rand(),
+                           LIBC_NAMESPACE::rand(), LIBC_NAMESPACE::rand()};
       {
         LIBC_NAMESPACE::internal::HashState state{0x1a2b3c4d5e6f7a8b};
         state.update(randomness, sizeof(randomness));
@@ -124,7 +126,7 @@ TEST(LlvmLibcHashTest, UniformLSB) {
 TEST(LlvmLibcHashTest, UniformMSB) {
   size_t sz = 1 << 7;
   AlignedMemory<size_t> counters(sz, sizeof(size_t), 0);
-  memset(counters.data, 0, sz * sizeof(size_t));
+  LIBC_NAMESPACE::memset(counters.data, 0, sz * sizeof(size_t));
   for (size_t i = 0; i < 200 * sz; ++i) {
     LIBC_NAMESPACE::internal::HashState state{0xa1b2c3d4e5f6a7b8};
     state.update(&i, sizeof(i));

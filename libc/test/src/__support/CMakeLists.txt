@@ -136,6 +136,8 @@ add_libc_test(
     libc.src.__support.hash
     libc.src.__support.CPP.new
     libc.src.stdlib.rand
+    libc.src.stdlib.srand
+    libc.src.string.memset
   UNIT_TEST_ONLY
     # Aligned Allocation is not supported in hermetic builds.
 )

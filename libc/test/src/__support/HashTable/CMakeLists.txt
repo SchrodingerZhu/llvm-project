@@ -6,7 +6,6 @@ add_libc_test(
     bitmask_test.cpp
   DEPENDS
     libc.src.__support.HashTable.bitmask
-    libc.include.stdlib
 )
 add_libc_test(
   table_test
@@ -30,7 +29,7 @@ if (CPU_SUPPORTS_SSE2)
       group_test.cpp
     DEPENDS
       libc.src.__support.HashTable.bitmask
-      libc.include.stdlib
+      libc.src.stdlib.rand
       libc.src.string.memcmp
     COMPILE_OPTIONS
       ${LIBC_COMPILE_OPTIONS_NATIVE}
@@ -44,7 +43,7 @@ if (CPU_SUPPORTS_SSE2)
       group_test.cpp
     DEPENDS
       libc.src.__support.HashTable.bitmask
-      libc.include.stdlib
+      libc.src.stdlib.rand
       libc.src.string.memcmp
     COMPILE_OPTIONS
       -mno-sse2 -mtune=generic
@@ -59,7 +58,7 @@ else()
       group_test.cpp
     DEPENDS
       libc.src.__support.HashTable.bitmask
-      libc.include.stdlib
+      libc.src.stdlib.rand
       libc.src.string.memcmp
     UNIT_TEST_ONLY
   )
