@@ -248,6 +248,7 @@ add_header_library(
     libc.src.__support.CPP.limits
     libc.src.__support.macros.optimization
     libc.src.__support.macros.attributes
+    libc.src.__support.macros.config
 )
 
 add_subdirectory(FPUtil)

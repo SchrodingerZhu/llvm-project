@@ -3,8 +3,8 @@ add_header_library(
   HDRS
     bitmask.h
   DEPENDS
-    libc.src.__support.common
     libc.src.__support.bit
+    libc.src.__support.macros.properties.cpu_features
 )
 
 list(FIND TARGET_ENTRYPOINT_NAME_LIST getrandom getrandom_index)
