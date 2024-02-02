@@ -1,3 +1,13 @@
+# Setup LLVM libc
+
+if(LIBUNWIND_USE_LLVM_LIBC)
+  add_compile_flags_if_supported(-ffreestanding)
+  add_compile_flags_if_supported(-nostdlib)
+  add_compile_flags_if_supported(-nostdinc)
+  include(GetClangResourceDir)
+  get_clang_resource_dir(LIBUNWIND_LLVM_LIBC_RESOURCE_INCLUDE PREFIX ${LLVM_BINARY_DIR} SUBDIR include)
+endif()
+
 # Get sources
 
 set(LIBUNWIND_CXX_SOURCES
@@ -142,6 +152,11 @@ include(WarningFlags)
 
 # Build the shared library.
 add_library(unwind_shared_objects OBJECT EXCLUDE_FROM_ALL ${LIBUNWIND_SOURCES} ${LIBUNWIND_HEADERS})
+if (LIBUNWIND_USE_LLVM_LIBC)
+  add_dependencies(unwind_shared_objects libc-headers)
+  target_include_directories(unwind_shared_objects SYSTEM PRIVATE ${LIBUNWIND_BINARY_DIR}/../libc/include ${LIBUNWIND_LLVM_LIBC_RESOURCE_INCLUDE})
+  target_compile_definitions(unwind_shared_objects PRIVATE NDEBUG)
+endif()
 cxx_add_warning_flags(unwind_shared_objects ${LIBUNWIND_ENABLE_WERROR} ${LIBUNWIND_ENABLE_PEDANTIC})
 if(CMAKE_C_COMPILER_ID STREQUAL MSVC)
   target_compile_options(unwind_shared_objects PRIVATE /GR-)
@@ -182,6 +197,11 @@ endif()
 
 # Build the static library.
 add_library(unwind_static_objects OBJECT EXCLUDE_FROM_ALL ${LIBUNWIND_SOURCES} ${LIBUNWIND_HEADERS})
+if (LIBUNWIND_USE_LLVM_LIBC)
+  add_dependencies(unwind_static_objects libc-headers)
+  target_include_directories(unwind_static_objects SYSTEM PRIVATE ${LIBUNWIND_BINARY_DIR}/../libc/include ${LIBUNWIND_LLVM_LIBC_RESOURCE_INCLUDE})
+  target_compile_definitions(unwind_static_objects PRIVATE NDEBUG _LIBUNWIND_IS_BAREMETAL)
+endif()
 cxx_add_warning_flags(unwind_static_objects ${LIBUNWIND_ENABLE_WERROR} ${LIBUNWIND_ENABLE_PEDANTIC})
 if(CMAKE_C_COMPILER_ID STREQUAL MSVC)
   target_compile_options(unwind_static_objects PRIVATE /GR-)

@@ -294,6 +294,13 @@ if(LLVM_LIBC_INCLUDE_SCUDO)
   endif()
 endif()
 
+option(LLVM_LIBC_INCLUDE_UNWIND "Include libunwind to provide execinfo support for LLVM libc" OFF)
+if(LLVM_LIBC_INCLUDE_UNWIND)
+  if (NOT ("libunwind" IN_LIST LLVM_ENABLE_PROJECTS OR "libunwind" IN_LIST LLVM_ENABLE_RUNTIMES))
+    message(FATAL_ERROR "libunwind cannot be included without adding it to LLVM_ENABLE_PROJECTS or LLVM_ENABLE_RUNTIMES")
+  endif()
+endif()
+
 option(LIBC_INCLUDE_DOCS "Build the libc documentation." ${LLVM_INCLUDE_DOCS})
 
 include(CMakeParseArguments)

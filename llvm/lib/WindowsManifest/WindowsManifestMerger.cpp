@@ -13,6 +13,7 @@
 #include "llvm/WindowsManifest/WindowsManifestMerger.h"
 #include "llvm/Config/config.h"
 #include "llvm/Support/MemoryBuffer.h"
+#include <libxml/parser.h>
 
 #if LLVM_ENABLE_LIBXML2
 #include <libxml/xmlreader.h>
@@ -670,6 +671,7 @@ WindowsManifestMerger::WindowsManifestMergerImpl::getMergedManifest() {
     assert(nullptr == xmlDocGetRootElement(CombinedDoc));
 
     xmlKeepBlanksDefault(0);
+
     xmlChar *Buff = nullptr;
     xmlDocDumpFormatMemoryEnc(OutputDoc.get(), &Buff, &BufferSize, "UTF-8", 1);
     Buffer.reset(Buff);
