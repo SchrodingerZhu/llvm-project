@@ -36,6 +36,8 @@ add_header_library(
     lock.h
   DEPENDS
     .futex_utils
+    .timespec_utils
+    libc.src.__support.threads.sleep
 )
 
 
