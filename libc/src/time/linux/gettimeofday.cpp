@@ -7,13 +7,9 @@
 //===----------------------------------------------------------------------===//
 
 #include "src/time/gettimeofday.h"
-
-#include "src/__support/OSUtil/syscall.h" // For internal syscall function.
 #include "src/__support/common.h"
 #include "src/errno/libc_errno.h"
-#include "src/time/linux/clockGetTimeImpl.h"
-
-#include <sys/syscall.h> // For syscall numbers.
+#include "src/time/linux/clock_gettime_impl.h"
 
 namespace LIBC_NAMESPACE {
 

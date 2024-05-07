@@ -23,11 +23,28 @@ add_header_library(
 )
 
 add_header_library(
+  timespec_utils
+  HDRS
+    timespec_utils.h
+  DEPENDS
+    libc.src.time.linux.clock_gettime_impl
+)
+
+add_header_library(
+  lock
+  HDRS
+    lock.h
+  DEPENDS
+    .futex_utils
+)
+
+
+add_header_library(
   mutex
   HDRS
     mutex.h
   DEPENDS
-    .futex
+    .futex_utils
     libc.src.__support.threads.mutex_common
 )
 

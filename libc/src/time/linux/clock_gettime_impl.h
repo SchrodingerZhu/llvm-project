@@ -12,7 +12,6 @@
 #include "src/__support/OSUtil/syscall.h" // For internal syscall function.
 #include "src/__support/common.h"
 #include "src/__support/error_or.h"
-#include "src/errno/libc_errno.h"
 
 #include <stdint.h>      // For int64_t.
 #include <sys/syscall.h> // For syscall numbers.
