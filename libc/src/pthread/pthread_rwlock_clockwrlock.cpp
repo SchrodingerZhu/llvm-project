@@ -31,18 +31,16 @@ LLVM_LIBC_FUNCTION(int, pthread_rwlock_clockwrlock,
     return EINVAL;
   if (clockid != CLOCK_MONOTONIC && clockid != CLOCK_REALTIME)
     return EINVAL;
-  bool is_realtime = (clockid == CLOCK_REALTIME);
   RwLock *rw = reinterpret_cast<RwLock *>(rwlock);
   LIBC_ASSERT(abstime && "clockwrlock called with a null timeout");
-  auto timeout = internal::AbsTimeout::from_timespec(
-      *abstime, /*is_realtime=*/is_realtime);
+  auto timeout = Timeout::timepoint(clockid, *abstime);
   if (LIBC_LIKELY(timeout.has_value()))
     return static_cast<int>(rw->write_lock(timeout.value()));
 
   switch (timeout.error()) {
-  case internal::AbsTimeout::Error::Invalid:
+  case Timeout::Error::Invalid:
     return EINVAL;
-  case internal::AbsTimeout::Error::BeforeEpoch:
+  case Timeout::Error::BeforeEpoch:
     return ETIMEDOUT;
   }
   __builtin_unreachable();

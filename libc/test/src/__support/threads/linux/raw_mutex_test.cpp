@@ -36,7 +36,7 @@ TEST(LlvmLibcSupportThreadsRawMutexTest, Timeout) {
   LIBC_NAMESPACE::internal::clock_gettime(CLOCK_MONOTONIC, &ts);
   ts.tv_sec += 1;
   // Timeout will be respected when deadlock happens.
-  auto timeout = LIBC_NAMESPACE::internal::AbsTimeout::from_timespec(ts, false);
+  auto timeout = LIBC_NAMESPACE::Timeout::from_timespec(ts, false);
   ASSERT_TRUE(timeout.has_value());
   // The following will timeout
   ASSERT_FALSE(mutex.lock(*timeout));

@@ -17,3 +17,16 @@ add_header_library(
     libc.src.__support.common
     libc.hdr.types.time_t
 )
+
+add_object_library(
+  timeout
+  SRCS
+    timeout.cpp
+  HDRS
+    timeout.h
+  DEPENDS
+    .units
+    .clock_gettime
+    libc.src.__support.common
+    libc.src.__support.CPP.expected
+)

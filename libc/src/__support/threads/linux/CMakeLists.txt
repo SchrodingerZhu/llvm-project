@@ -37,7 +37,6 @@ add_header_library(
     .futex_utils
     libc.src.__support.threads.sleep
     libc.src.__support.time.timeout
-    libc.src.__support.time.linux.monotonicity
     libc.src.__support.CPP.optional
     libc.hdr.types.pid_t
   COMPILE_OPTIONS

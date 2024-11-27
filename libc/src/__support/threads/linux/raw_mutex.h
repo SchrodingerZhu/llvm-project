@@ -70,7 +70,7 @@ private:
 #if LIBC_COPT_TIMEOUT_ENSURE_MONOTONICITY
     /* ADL should kick in */
     if (timeout)
-      timeout = timeout->to_timepoint(CLOCK_MONOTONIC);
+      *timeout = timeout->to_timepoint(CLOCK_MONOTONIC);
 #endif
     for (;;) {
       // Try to grab the lock if it is unlocked. Mark the contention flag if it

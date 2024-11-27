@@ -4,6 +4,5 @@ add_libc_test(
   SRCS timeout_test.cpp
   DEPENDS
     libc.src.__support.time.timeout
-    libc.src.__support.time.linux.monotonicity
     libc.src.__support.CPP.expected
 )

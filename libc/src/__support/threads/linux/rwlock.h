@@ -34,10 +34,6 @@
 #warning "LIBC_COPT_TIMEOUT_ENSURE_MONOTONICITY is not defined, defaulting to 1"
 #endif
 
-#if LIBC_COPT_TIMEOUT_ENSURE_MONOTONICITY
-#include "src/__support/time/linux/monotonicity.h"
-#endif
-
 namespace LIBC_NAMESPACE_DECL {
 // Forward declaration of the RwLock class.
 class RwLock;
@@ -398,7 +394,7 @@ private:
 #if LIBC_COPT_TIMEOUT_ENSURE_MONOTONICITY
     // Phase 2: convert the timeout if necessary.
     if (timeout)
-      ensure_monotonicity(*timeout);
+      *timeout = timeout->to_timepoint(CLOCK_MONOTONIC);
 #endif
 
     // Phase 3: spin to get the initial state. We ignore the timing due to

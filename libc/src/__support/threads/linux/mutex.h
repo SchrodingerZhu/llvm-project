@@ -65,7 +65,7 @@ public:
   }
 
   // TODO: record owner and lock count.
-  LIBC_INLINE MutexError timed_lock(internal::AbsTimeout abs_time) {
+  LIBC_INLINE MutexError timed_lock(Timeout abs_time) {
     if (this->RawMutex::lock(abs_time, this->pshared))
       return MutexError::NONE;
     return MutexError::TIMEOUT;

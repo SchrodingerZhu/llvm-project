@@ -9,6 +9,7 @@
 #ifndef LLVM_LIBC_SRC___SUPPORT_THREADS_LINUX_FUTEX_UTILS_H
 #define LLVM_LIBC_SRC___SUPPORT_THREADS_LINUX_FUTEX_UTILS_H
 
+#include "hdr/time_macros.h"
 #include "src/__support/CPP/atomic.h"
 #include "src/__support/CPP/limits.h"
 #include "src/__support/CPP/optional.h"
