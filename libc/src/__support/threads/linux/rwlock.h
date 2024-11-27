@@ -97,8 +97,7 @@ public:
   }
 
   template <Role role>
-  LIBC_INLINE long wait(FutexWordType expected,
-                        cpp::optional<Futex::Timeout> timeout,
+  LIBC_INLINE long wait(FutexWordType expected, cpp::optional<Timeout> timeout,
                         bool is_pshared) {
     if constexpr (role == Role::Reader)
       return reader_serialization.wait(expected, timeout, is_pshared);
@@ -389,7 +388,7 @@ public:
 private:
   template <Role role>
   LIBC_INLINE LockResult
-  lock_slow(cpp::optional<Futex::Timeout> timeout = cpp::nullopt,
+  lock_slow(cpp::optional<Timeout> timeout = cpp::nullopt,
             unsigned spin_count = LIBC_COPT_RWLOCK_DEFAULT_SPIN_COUNT) {
     // Phase 1: deadlock detection.
     // A deadlock happens if this is a RAW/WAW lock in the same thread.
@@ -468,7 +467,7 @@ private:
 public:
   [[nodiscard]]
   LIBC_INLINE LockResult
-  read_lock(cpp::optional<Futex::Timeout> timeout = cpp::nullopt,
+  read_lock(cpp::optional<Timeout> timeout = cpp::nullopt,
             unsigned spin_count = LIBC_COPT_RWLOCK_DEFAULT_SPIN_COUNT) {
     LockResult result = try_read_lock();
     if (LIBC_LIKELY(result != LockResult::Busy))
@@ -477,7 +476,7 @@ public:
   }
   [[nodiscard]]
   LIBC_INLINE LockResult
-  write_lock(cpp::optional<Futex::Timeout> timeout = cpp::nullopt,
+  write_lock(cpp::optional<Timeout> timeout = cpp::nullopt,
              unsigned spin_count = LIBC_COPT_RWLOCK_DEFAULT_SPIN_COUNT) {
     LockResult result = try_write_lock();
     if (LIBC_LIKELY(result != LockResult::Busy))

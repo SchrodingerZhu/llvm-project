@@ -1447,7 +1447,7 @@ libc_support_library(
 
 libc_support_library(
     name = "__support_time_linux_abs_timeout",
-    hdrs = ["src/__support/time/linux/abs_timeout.h"],
+    hdrs = ["src/__support/time/timeout.h"],
     target_compatible_with = select({
         "@platforms//os:linux": [],
         "//conditions:default": ["@platforms//:incompatible"],

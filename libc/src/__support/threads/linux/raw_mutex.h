@@ -17,14 +17,10 @@
 #include "src/__support/threads/linux/futex_utils.h"
 #include "src/__support/threads/linux/futex_word.h"
 #include "src/__support/threads/sleep.h"
-#include "src/__support/time/linux/abs_timeout.h"
+#include "src/__support/time/timeout.h"
 
 #ifndef LIBC_COPT_TIMEOUT_ENSURE_MONOTONICITY
 #define LIBC_COPT_TIMEOUT_ENSURE_MONOTONICITY 1
-#endif
-
-#if LIBC_COPT_TIMEOUT_ENSURE_MONOTONICITY
-#include "src/__support/time/linux/monotonicity.h"
 #endif
 
 #ifndef LIBC_COPT_RAW_MUTEX_DEFAULT_SPIN_COUNT
@@ -63,8 +59,8 @@ private:
 
   // Return true if the lock is acquired. Return false if timeout happens before
   // the lock is acquired.
-  LIBC_INLINE bool lock_slow(cpp::optional<Futex::Timeout> timeout,
-                             bool is_pshared, unsigned spin_count) {
+  LIBC_INLINE bool lock_slow(cpp::optional<Timeout> timeout, bool is_pshared,
+                             unsigned spin_count) {
     FutexWordType state = spin(spin_count);
     // Before go into contention state, try to grab the lock.
     if (state == UNLOCKED &&
@@ -74,7 +70,7 @@ private:
 #if LIBC_COPT_TIMEOUT_ENSURE_MONOTONICITY
     /* ADL should kick in */
     if (timeout)
-      ensure_monotonicity(*timeout);
+      timeout = timeout->to_timepoint(CLOCK_MONOTONIC);
 #endif
     for (;;) {
       // Try to grab the lock if it is unlocked. Mark the contention flag if it
@@ -102,8 +98,7 @@ public:
         expected, LOCKED, cpp::MemoryOrder::ACQUIRE, cpp::MemoryOrder::RELAXED);
   }
   LIBC_INLINE bool
-  lock(cpp::optional<Futex::Timeout> timeout = cpp::nullopt,
-       bool is_shared = false,
+  lock(cpp::optional<Timeout> timeout = cpp::nullopt, bool is_shared = false,
        unsigned spin_count = LIBC_COPT_RAW_MUTEX_DEFAULT_SPIN_COUNT) {
     // Timeout will not be checked if immediate lock is possible.
     if (LIBC_LIKELY(try_lock()))
