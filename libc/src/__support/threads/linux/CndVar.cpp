@@ -86,8 +86,10 @@ void CndVar::notify_one() {
   // |qmtx| and signal the waiter using a single FUTEX_WAKE_OP signal.
   qmtx.lock();
   CndWaiter *first = pop_front();
-  if (first == nullptr)
+  if (first == nullptr) {
     qmtx.unlock();
+    return;
+  }
 
   qmtx.reset();
 
