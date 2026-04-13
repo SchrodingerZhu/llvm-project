@@ -57,10 +57,16 @@ CndVar::Result CndVar::wait(Mutex *m,
   uint32_t expected = WS_Waiting;
   // only sleep if the waiter is not signalled
   if (waiter.futex_word.compare_exchange_strong(expected, WS_Sleeping)) {
-    // TODO: we may already at a broadcast queue. need to fix this situation.
     if (waiter.futex_word.wait(WS_Sleeping, timeout, true) == -ETIMEDOUT) {
       cpp::lock_guard ml(qmtx);
-      remove(&waiter);
+      if (waiter.prev == nullptr) {
+        // we already entered a broadcast queue, we cannot remove ourselves
+        // and need to wait until we are being signalled.
+        while (waiter.futex_word.load(cpp::MemoryOrder::RELAXED) == WS_Sleeping)
+          sleep_briefly();
+      } else {
+        remove(&waiter);
+      }
       // POSIX.1-2024 says the following:
       // "When such timeouts occur, pthread_cond_clockwait() shall nonetheless
       // release and re-acquire the mutex referenced by mutex, and may consume a
@@ -105,7 +111,7 @@ void CndVar::broadcast() {
   WQNode *queue_start = nullptr;
   WQNode *queue_end = nullptr;
   auto push_to_wake_list = [&](CndWaiter *w) {
-    w->next = nullptr;
+    w->prev = w->next = nullptr;
     if (queue_start == nullptr) {
       queue_start = w;
       queue_end = w;
