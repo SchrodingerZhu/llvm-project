@@ -53,14 +53,20 @@ CndVar::Result CndVar::wait(Mutex *m,
     internal::ensure_monotonicity(*timeout);
 #endif
   Result res = Result::Success;
-  if (waiter.futex_word.wait(WS_Waiting, timeout, true) == -ETIMEDOUT) {
-    cpp::lock_guard ml(qmtx);
-    remove(&waiter);
-    // POSIX.1-2024 says the following:
-    // "When such timeouts occur, pthread_cond_clockwait() shall nonetheless
-    // release and re-acquire the mutex referenced by mutex, and may consume a
-    // condition signal directed concurrently at the condition variable."
-    res = Result::Timeout;
+  spin_wait(&waiter);
+  uint32_t expected = WS_Waiting;
+  // only sleep if the waiter is not signalled
+  if (waiter.futex_word.compare_exchange_strong(expected, WS_Sleeping)) {
+    // TODO: we may already at a broadcast queue. need to fix this situation.
+    if (waiter.futex_word.wait(WS_Sleeping, timeout, true) == -ETIMEDOUT) {
+      cpp::lock_guard ml(qmtx);
+      remove(&waiter);
+      // POSIX.1-2024 says the following:
+      // "When such timeouts occur, pthread_cond_clockwait() shall nonetheless
+      // release and re-acquire the mutex referenced by mutex, and may consume a
+      // condition signal directed concurrently at the condition variable."
+      res = Result::Timeout;
+    }
   }
 
   // At this point, if locking |m| fails, we can simply return as the
@@ -79,31 +85,60 @@ void CndVar::notify_one() {
 
   qmtx.reset();
 
-  // this is a special WAKE_OP, so we use syscall directly
-  LIBC_NAMESPACE::syscall_impl<long>(
-      FUTEX_SYSCALL_ID, &qmtx.get_raw_futex(), FUTEX_WAKE_OP, 1, 1,
-      &first->futex_word.val,
-      FUTEX_OP(FUTEX_OP_SET, WS_Signalled, FUTEX_OP_CMP_EQ, WS_Waiting));
+  uint32_t expected = WS_Waiting;
+  // if at the time of wake up, target is already sleeping, then we use futex
+  // to wake it up. Notice we cannot exchange signal directly to signaled here
+  // because this event may happpen time window between cmpxchg and wait at the
+  // waiter side, hence invalidates the waiter node. The waiter must remain
+  // valid until the futex operation completes.
+  if (!first->futex_word.compare_exchange_strong(expected, WS_Signalled))
+    LIBC_NAMESPACE::syscall_impl<long>(
+        FUTEX_SYSCALL_ID, &qmtx.get_raw_futex(), FUTEX_WAKE_OP, 1, 1,
+        &first->futex_word.val,
+        FUTEX_OP(FUTEX_OP_SET, WS_Signalled, FUTEX_OP_CMP_EQ, WS_Sleeping));
 }
 
 void CndVar::broadcast() {
   // TODO: currently, we need to hold lock until broadcast is done to avoid
   // timeout race condition. We could mimic musl to alternate the list state
   // first and then wake or requeue after releasing the lock.
-  cpp::lock_guard ml(qmtx);
-  CndWaiter *waiter = take_all();
+  WQNode *queue_start = nullptr;
+  WQNode *queue_end = nullptr;
+  auto push_to_wake_list = [&](CndWaiter *w) {
+    w->next = nullptr;
+    if (queue_start == nullptr) {
+      queue_start = w;
+      queue_end = w;
+    } else {
+      queue_end->next = w;
+      queue_end = w;
+    }
+  };
+
+  {
+    cpp::lock_guard ml(qmtx);
+    CndWaiter *waiter = take_all();
+    while (waiter != nullptr) {
+      CndWaiter *snapshot = waiter;
+      waiter = static_cast<CndWaiter *>(snapshot->next);
+      uint32_t expected = WS_Waiting;
+      // only needs to wake up the waiter if it really enters sleeping state.
+      if (!snapshot->futex_word.compare_exchange_strong(expected, WS_Signalled))
+        push_to_wake_list(snapshot);
+    }
+  }
   uint32_t dummy_futex_word;
-  while (waiter != nullptr) {
+  while (queue_start != nullptr) {
     // FUTEX_WAKE_OP is used instead of just FUTEX_WAKE as it allows us to
     // atomically update the waiter status to WS_Signalled before waking
     // up the waiter. A dummy location is used for the other futex of
     // FUTEX_WAKE_OP.
-    CndWaiter *snapshot = waiter;
-    waiter = static_cast<CndWaiter *>(snapshot->next);
+    CndWaiter *snapshot = static_cast<CndWaiter *>(queue_start);
+    queue_start = snapshot->next;
     LIBC_NAMESPACE::syscall_impl<long>(
         FUTEX_SYSCALL_ID, &dummy_futex_word, FUTEX_WAKE_OP, 1, 1,
         &snapshot->futex_word.val,
-        FUTEX_OP(FUTEX_OP_SET, WS_Signalled, FUTEX_OP_CMP_EQ, WS_Waiting));
+        FUTEX_OP(FUTEX_OP_SET, WS_Signalled, FUTEX_OP_CMP_EQ, WS_Sleeping));
   }
 }
 
@@ -148,6 +183,14 @@ void CndVar::remove(CndWaiter *w) {
   w->next->prev = w->prev;
   w->prev->next = w->next;
   w->next = w->prev = nullptr;
+}
+
+void CndVar::spin_wait(CndWaiter *w) {
+  constexpr size_t SPIN_WAIT_LIMIT = 100;
+
+  for (size_t i = 0; i < SPIN_WAIT_LIMIT; ++i)
+    if (w->futex_word.load(cpp::MemoryOrder::RELAXED) != WS_Waiting)
+      break;
 }
 
 } // namespace LIBC_NAMESPACE_DECL

@@ -28,8 +28,9 @@ namespace LIBC_NAMESPACE_DECL {
 // cleanup routine once that functionality is available.
 class CndVar {
   enum CndWaiterStatus : uint32_t {
-    WS_Waiting = 0xE,
-    WS_Signalled = 0x5,
+    WS_Waiting = 0x0,
+    WS_Sleeping = 0x1,
+    WS_Signalled = 0x2,
   };
 
   struct WQNode {
@@ -73,6 +74,7 @@ private:
   CndWaiter *pop_front();
   void remove(CndWaiter *w);
   CndWaiter *take_all();
+  static void spin_wait(CndWaiter *w);
 };
 
 } // namespace LIBC_NAMESPACE_DECL
