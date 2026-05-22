@@ -9,6 +9,7 @@
 #![allow(clippy::missing_safety_doc, clippy::result_unit_err, dead_code)]
 
 pub mod empirical;
+pub mod tcmalloc_bench;
 
 use std::{
     alloc::{GlobalAlloc, Layout},
