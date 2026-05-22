@@ -1,15 +1,20 @@
-//===-- Unittests for talc_heap -------------------------------------------===//
+//===----------------------------------------------------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
+//
+// \file
+// Unit tests for the Flat Two-Level Segregated Fit (FlatTLSF) heap allocator.
+//
+//===----------------------------------------------------------------------===//
 
 #include "src/__support/CPP/new.h"
 #include "src/__support/CPP/span.h"
 #include "src/__support/macros/config.h"
-#include "src/__support/talc_heap.h"
+#include "src/__support/flat_tlsf_heap.h"
 #include "src/string/memcmp.h"
 #include "src/string/memcpy.h"
 #include "test/UnitTest/Test.h"
@@ -23,31 +28,31 @@ _end:
 __llvm_libc_heap_limit:
 )");
 
-using LIBC_NAMESPACE::TalcHeap;
-using LIBC_NAMESPACE::TalcHeapBuffer;
-using LIBC_NAMESPACE::cpp::byte;
+using LIBC_NAMESPACE::flat_tlsf::FlatTlsfHeap;
+using LIBC_NAMESPACE::flat_tlsf::FlatTlsfHeapBuffer;
+using LIBC_NAMESPACE::flat_tlsf::RawByte;
 using LIBC_NAMESPACE::cpp::span;
 
-static LIBC_CONSTINIT TalcHeapBuffer<2048> talc_heap_symbols;
-TalcHeap *talc_heap = &talc_heap_symbols;
+static LIBC_CONSTINIT FlatTlsfHeapBuffer<2048> flat_tlsf_heap_symbols;
+FlatTlsfHeap *flat_tlsf_heap = &flat_tlsf_heap_symbols;
 
 #define TEST_FOR_EACH_ALLOCATOR(TestCase, BufferSize)                          \
-  class LlvmLibcTalcHeapTest##TestCase                                         \
+  class LlvmLibcFlatTlsfHeapTest##TestCase                                     \
       : public LIBC_NAMESPACE::testing::Test {                                 \
   public:                                                                      \
-    TalcHeapBuffer<BufferSize> fake_global_buffer;                             \
+    FlatTlsfHeapBuffer<BufferSize> fake_global_buffer;                         \
     void SetUp() override {                                                    \
-      talc_heap = new (&fake_global_buffer) TalcHeapBuffer<BufferSize>;        \
+      flat_tlsf_heap = new (&fake_global_buffer) FlatTlsfHeapBuffer<BufferSize>; \
     }                                                                          \
-    void RunTest(TalcHeap &allocator, [[maybe_unused]] size_t N);              \
+    void RunTest(FlatTlsfHeap &allocator, [[maybe_unused]] size_t N);          \
   };                                                                           \
-  TEST_F(LlvmLibcTalcHeapTest##TestCase, TestCase) {                           \
-    byte buf[BufferSize] = {byte(0)};                                          \
-    TalcHeap allocator(buf);                                                   \
+  TEST_F(LlvmLibcFlatTlsfHeapTest##TestCase, TestCase) {                       \
+    RawByte buf[BufferSize] = {RawByte(0)};                                    \
+    FlatTlsfHeap allocator(buf);                                               \
     RunTest(allocator, BufferSize);                                            \
-    RunTest(*talc_heap, talc_heap->region().size());                           \
+    RunTest(*flat_tlsf_heap, flat_tlsf_heap->region().size());                 \
   }                                                                            \
-  void LlvmLibcTalcHeapTest##TestCase::RunTest(TalcHeap &allocator,            \
+  void LlvmLibcFlatTlsfHeapTest##TestCase::RunTest(FlatTlsfHeap &allocator,    \
                                                [[maybe_unused]] size_t N)
 
 TEST_FOR_EACH_ALLOCATOR(CanAllocate, 2048) {
@@ -88,11 +93,11 @@ TEST_FOR_EACH_ALLOCATOR(ReturnsNullWhenAllocationTooLarge, 2048) {
   EXPECT_EQ(allocator.allocate(N), static_cast<void *>(nullptr));
 }
 
-TEST(LlvmLibcTalcHeap, ReturnsNullWhenFull) {
+TEST(LlvmLibcFlatTlsfHeap, ReturnsNullWhenFull) {
   constexpr size_t N = 2048;
-  byte buf[N];
+  RawByte buf[N];
 
-  TalcHeap allocator(buf);
+  FlatTlsfHeap allocator(buf);
 
   bool went_null = false;
   for (size_t i = 0; i < N; i++) {
@@ -131,8 +136,8 @@ TEST_FOR_EACH_ALLOCATOR(CanRealloc, 2048) {
 TEST_FOR_EACH_ALLOCATOR(ReallocHasSameContent, 2048) {
   constexpr size_t ALLOC_SIZE = sizeof(int);
   constexpr size_t kNewAllocSize = sizeof(int) * 2;
-  byte data1[ALLOC_SIZE];
-  byte data2[ALLOC_SIZE];
+  RawByte data1[ALLOC_SIZE];
+  RawByte data2[ALLOC_SIZE];
 
   int *ptr1 = reinterpret_cast<int *>(allocator.allocate(ALLOC_SIZE));
   *ptr1 = 42;
@@ -152,9 +157,6 @@ TEST_FOR_EACH_ALLOCATOR(ReallocSmallerSize, 2048) {
   void *ptr1 = allocator.allocate(ALLOC_SIZE);
   void *ptr2 = allocator.realloc(ptr1, kNewAllocSize);
 
-  // In our simple implementation, realloc of smaller size might allocate new or keep.
-  // If it keeps, ptr1 == ptr2. If it allocates new, they might differ but content is preserved.
-  // Let's just expect it to succeed.
   EXPECT_NE(ptr2, static_cast<void *>(nullptr));
 }
 
@@ -173,9 +175,9 @@ TEST_FOR_EACH_ALLOCATOR(CanCalloc, 2048) {
   constexpr size_t ALLOC_SIZE = 128;
   constexpr size_t NUM = 4;
   constexpr int size = NUM * ALLOC_SIZE;
-  constexpr byte zero{0};
+  constexpr RawByte zero{0};
 
-  byte *ptr1 = reinterpret_cast<byte *>(allocator.calloc(NUM, ALLOC_SIZE));
+  RawByte *ptr1 = reinterpret_cast<RawByte *>(allocator.calloc(NUM, ALLOC_SIZE));
 
   for (int i = 0; i < size; i++) {
     EXPECT_EQ(ptr1[i], zero);
@@ -207,9 +209,9 @@ TEST_FOR_EACH_ALLOCATOR(AlignedAlloc, 2048) {
   }
 }
 
-TEST(LlvmLibcTalcHeap, AlignedAllocUnalignedBuffer) {
-  byte buf[4096] = {byte(0)};
-  TalcHeap allocator(span<byte>(buf).subspan(1));
+TEST(LlvmLibcFlatTlsfHeap, AlignedAllocUnalignedBuffer) {
+  RawByte buf[4096] = {RawByte(0)};
+  FlatTlsfHeap allocator(span<RawByte>(buf).subspan(1));
 
   constexpr size_t ALIGNMENTS[] = {1, 2, 4, 8, 16, 32, 64, 128, 256};
   constexpr size_t SIZE_SCALES[] = {1, 2, 3, 4, 5};

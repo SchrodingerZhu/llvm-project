@@ -1,18 +1,24 @@
-//===-- talc_heap_fuzz.cpp ------------------------------------------------===//
+//===----------------------------------------------------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
+//
+// \file
+// Fuzzing harness for the Flat Two-Level Segregated Fit (FlatTLSF) heap allocator.
+//
+//===----------------------------------------------------------------------===//
 ///
-/// Fuzzing test for llvm-libc C++ TalcHeap implementation.
+/// Fuzzing test for llvm-libc C++ FlatTlsfHeap implementation.
 ///
 //===----------------------------------------------------------------------===//
 
 #include "src/__support/CPP/bit.h"
 #include "src/__support/CPP/optional.h"
-#include "src/__support/talc_heap.h"
+#include "src/__support/flat_tlsf_heap.h"
+#include "src/__support/math_extras.h"
 #include "src/string/memory_utils/inline_memcpy.h"
 #include "src/string/memory_utils/inline_memmove.h"
 #include "src/string/memory_utils/inline_memset.h"
@@ -26,7 +32,8 @@ _end:
 __llvm_libc_heap_limit:
 )");
 
-using LIBC_NAMESPACE::TalcHeap;
+using LIBC_NAMESPACE::flat_tlsf::FlatTlsfHeap;
+using LIBC_NAMESPACE::flat_tlsf::FlatTlsfHeapBuffer;
 using LIBC_NAMESPACE::inline_memset;
 using LIBC_NAMESPACE::cpp::nullopt;
 using LIBC_NAMESPACE::cpp::optional;
@@ -42,7 +49,7 @@ struct Alloc {
 // A simple vector that tracks allocations using the heap.
 class AllocVec {
 public:
-  AllocVec(TalcHeap &heap) : heap(&heap), size_(0), capacity(0) {
+  AllocVec(FlatTlsfHeap &heap) : heap(&heap), size_(0), capacity(0) {
     allocs = nullptr;
   }
 
@@ -73,7 +80,7 @@ public:
   }
 
 private:
-  TalcHeap *heap;
+  FlatTlsfHeap *heap;
   Alloc *allocs;
   size_t size_;
   size_t capacity;
@@ -135,7 +142,7 @@ optional<size_t> choose_alloc_idx(const AllocVec &allocs, const uint8_t *&data,
   TYPE NAME = *maybe_##NAME
 
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t remainder) {
-  LIBC_NAMESPACE::TalcHeapBuffer<heap_size> heap;
+  LIBC_NAMESPACE::flat_tlsf::FlatTlsfHeapBuffer<heap_size> heap;
   AllocVec allocs(heap);
 
   uint8_t canary = 0;
@@ -147,7 +154,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t remainder) {
 
       // Perform allocation.
       void *ptr = nullptr;
-      size_t alignment = TalcHeap::MIN_ALIGN;
+      size_t alignment = FlatTlsfHeap::MIN_ALIGN;
       switch (alloc_type) {
       case AllocType::MALLOC:
         ptr = heap.allocate(alloc_size);
@@ -172,14 +179,14 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t remainder) {
                           alloc_size - alloc.size);
           alloc.ptr = ptr;
           alloc.size = alloc_size;
-          alloc.alignment = TalcHeap::MIN_ALIGN;
+          alloc.alignment = FlatTlsfHeap::MIN_ALIGN;
         }
         break;
       }
       case AllocType::CALLOC: {
         ASSIGN_OR_RETURN(size_t, count, choose_size(data, remainder));
         size_t total;
-        if (__builtin_mul_overflow(count, alloc_size, &total))
+        if (LIBC_NAMESPACE::mul_overflow(count, alloc_size, total))
           return 0;
         ptr = heap.calloc(count, alloc_size);
         if (ptr)
@@ -194,8 +201,8 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t remainder) {
 
       if (ptr) {
         // aligned_allocate should automatically apply a minimum alignment.
-        if (alignment < TalcHeap::MIN_ALIGN)
-          alignment = TalcHeap::MIN_ALIGN;
+        if (alignment < FlatTlsfHeap::MIN_ALIGN)
+          alignment = FlatTlsfHeap::MIN_ALIGN;
         // Check alignment.
         if (reinterpret_cast<uintptr_t>(ptr) % alignment)
           __builtin_trap();

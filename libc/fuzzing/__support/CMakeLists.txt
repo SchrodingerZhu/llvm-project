@@ -54,15 +54,15 @@ if(LLVM_LIBC_FULL_BUILD AND NOT LIBC_TARGET_OS_IS_GPU)
   )
 
   add_libc_fuzzer(
-    talc_heap_fuzz
+    flat_tlsf_heap_fuzz
     SRCS
-      talc_heap_fuzz.cpp
+      flat_tlsf_heap_fuzz.cpp
     DEPENDS
-      libc.src.__support.talc_heap
+      libc.src.__support.flat_tlsf_heap
   )
-  get_fq_target_name(talc_heap_fuzz talc_heap_fuzz_target_name)
+  get_fq_target_name(flat_tlsf_heap_fuzz flat_tlsf_heap_fuzz_target_name)
   set_target_properties(
-    ${talc_heap_fuzz_target_name}
+    ${flat_tlsf_heap_fuzz_target_name}
     PROPERTIES
       MSVC_DEBUG_INFORMATION_FORMAT ""
   )

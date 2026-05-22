@@ -71,15 +71,15 @@ if(LLVM_LIBC_FULL_BUILD AND NOT LIBC_TARGET_OS_IS_GPU)
       libc.src.string.memcpy
   )
   add_libc_test(
-    talc_heap_test
+    flat_tlsf_heap_test
     SUITE
       libc-support-tests
     SRCS
-      talc_heap_test.cpp
+      flat_tlsf_heap_test.cpp
     DEPENDS
       libc.src.__support.CPP.new
       libc.src.__support.CPP.span
-      libc.src.__support.talc_heap
+      libc.src.__support.flat_tlsf_heap
       libc.src.__support.integer_to_string
       libc.src.string.memcmp
       libc.src.string.memcpy

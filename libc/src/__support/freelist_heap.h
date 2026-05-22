@@ -21,22 +21,22 @@
 #include "src/string/memory_utils/inline_memcpy.h"
 #include "src/string/memory_utils/inline_memset.h"
 
-#ifdef LIBC_USE_TALC_ALLOCATOR
+#ifdef LIBC_USE_FLAT_TLSF_ALLOCATOR
 
-#include "src/__support/talc_heap.h"
+#include "src/__support/flat_tlsf_heap.h"
 
 namespace LIBC_NAMESPACE_DECL {
 
-using FreeListHeap = TalcHeap;
+using FreeListHeap = flat_tlsf::FlatTlsfHeap;
 
 template <size_t BUFF_SIZE>
-using FreeListHeapBuffer = TalcHeapBuffer<BUFF_SIZE>;
+using FreeListHeapBuffer = flat_tlsf::FlatTlsfHeapBuffer<BUFF_SIZE>;
 
 extern FreeListHeap *freelist_heap;
 
 } // namespace LIBC_NAMESPACE_DECL
 
-#else // !LIBC_USE_TALC_ALLOCATOR
+#else // !LIBC_USE_FLAT_TLSF_ALLOCATOR
 
 namespace LIBC_NAMESPACE_DECL {
 
@@ -226,6 +226,6 @@ extern FreeListHeap *freelist_heap;
 
 } // namespace LIBC_NAMESPACE_DECL
 
-#endif // LIBC_USE_TALC_ALLOCATOR
+#endif // LIBC_USE_FLAT_TLSF_ALLOCATOR
 
 #endif // LLVM_LIBC_SRC___SUPPORT_FREELIST_HEAP_H
