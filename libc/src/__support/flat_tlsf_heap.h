@@ -623,6 +623,12 @@ LIBC_INLINE void FlatTlsfHeap::register_gap(RawByte *base, RawByte *gap_end) {
 
   size_t size = gap_end - base;
   if (size < MIN_GAP_SIZE) {
+    // A mini-gap (Hole) cannot act as a free gap list node, so we must clear
+    // the ABOVE_FREE flag on the tag of the chunk directly below us in memory!
+    Tag below_tag = cpp::bit_cast<Tag>(*(base - 1));
+    below_tag.set_above_free(false);
+    below_tag.store_to(base - 1);
+
     FreeHole::initialize(base, size);
     return;
   }
