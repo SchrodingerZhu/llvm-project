@@ -15,7 +15,3 @@ venv/
 .pytest_cache/
 __pycache__/
 *.pyc
-
-# Generated benchmark plots
-results/*.png
-results/compare.md
