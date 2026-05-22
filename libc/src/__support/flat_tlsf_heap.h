@@ -139,7 +139,6 @@ struct Tag {
   LIBC_INLINE_VAR static constexpr RawByte HOLE_FLAG =
       1 << 4; // 0x10: Block below is a sub-size mini-gap
 
-
   LIBC_INLINE constexpr bool is_allocated() const {
     return (value & ALLOCATED_FLAG) != 0;
   }
@@ -377,7 +376,8 @@ public:
 
   LIBC_INLINE RawByte *get_start() const { return ptr; }
   LIBC_INLINE size_t get_size() const {
-    return *reinterpret_cast<const size_t *>(ptr + PTR_SIZE * 3) & SIZE_MASK;
+    return (*reinterpret_cast<const size_t *>(ptr + PTR_SIZE * 3) & ~1ULL) &
+           SIZE_MASK;
   }
   LIBC_INLINE RawByte *get_end() const { return ptr + get_size(); }
 
@@ -597,7 +597,8 @@ LIBC_INLINE void FlatTlsfHeap::init() {
   LIBC_ASSERT(gap_base < heap_end && "Heap is too small for barrier");
 
   // Write the initial heap base boundary barrier tag.
-  Tag barrier_tag = Tag{static_cast<RawByte>(Tag::ALLOCATED_FLAG | Tag::HEAP_BASE_FLAG)};
+  Tag barrier_tag =
+      Tag{static_cast<RawByte>(Tag::ALLOCATED_FLAG | Tag::HEAP_BASE_FLAG)};
   barrier_tag.store_to(gap_base - 1);
 
   if (gap_base < heap_end) {
@@ -830,7 +831,7 @@ LIBC_INLINE void *FlatTlsfHeap::allocate_impl(size_t alignment, size_t size) {
   if (remaining >= MIN_GAP_SIZE) {
     alloc_end = base + actual_size_needed;
     tag.store_to(alloc_end - 1);
-    
+
     AllocatedChunk::initialize(base, alloc_end - base, tag);
 
     register_gap(alloc_end, chunk_end);
@@ -917,7 +918,8 @@ LIBC_INLINE void FlatTlsfHeap::free(void *ptr) {
                 "Heap end block cannot have ABOVE_FREE set");
 
     size_t above_size =
-        *reinterpret_cast<size_t *>(chunk_end + PTR_SIZE * 3) & SIZE_MASK;
+        (*reinterpret_cast<size_t *>(chunk_end + PTR_SIZE * 3) & ~1ULL) &
+        SIZE_MASK;
     deregister_gap(chunk_end);
 
     chunk_end += above_size;
@@ -995,7 +997,8 @@ LIBC_INLINE void FlatTlsfHeap::dump_avails() const {
       IntegerToString<uint32_t> bin_str(i);
       write_to_stderr(bin_str.view());
       write_to_stderr(": base=");
-      IntegerToString<uintptr_t> base_str(reinterpret_cast<uintptr_t>(gap.get_start()));
+      IntegerToString<uintptr_t> base_str(
+          reinterpret_cast<uintptr_t>(gap.get_start()));
       write_to_stderr(base_str.view());
       write_to_stderr(", size=");
       IntegerToString<size_t> size_str(gap.get_size());
