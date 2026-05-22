@@ -21,6 +21,23 @@
 #include "src/string/memory_utils/inline_memcpy.h"
 #include "src/string/memory_utils/inline_memset.h"
 
+#ifdef LIBC_USE_TALC_ALLOCATOR
+
+#include "src/__support/talc_heap.h"
+
+namespace LIBC_NAMESPACE_DECL {
+
+using FreeListHeap = TalcHeap;
+
+template <size_t BUFF_SIZE>
+using FreeListHeapBuffer = TalcHeapBuffer<BUFF_SIZE>;
+
+extern FreeListHeap *freelist_heap;
+
+} // namespace LIBC_NAMESPACE_DECL
+
+#else // !LIBC_USE_TALC_ALLOCATOR
+
 namespace LIBC_NAMESPACE_DECL {
 
 extern "C" cpp::byte _end;
@@ -208,5 +225,7 @@ LIBC_INLINE void *FreeListHeap::calloc(size_t num, size_t size) {
 extern FreeListHeap *freelist_heap;
 
 } // namespace LIBC_NAMESPACE_DECL
+
+#endif // LIBC_USE_TALC_ALLOCATOR
 
 #endif // LLVM_LIBC_SRC___SUPPORT_FREELIST_HEAP_H

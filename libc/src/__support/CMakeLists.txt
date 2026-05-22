@@ -59,16 +59,31 @@ add_header_library(
     .freetrie
 )
 
-libc_set_definition(libc_freelist_malloc_size "LIBC_FREELIST_MALLOC_SIZE=${LIBC_CONF_FREELIST_MALLOC_BUFFER_SIZE}")
 add_object_library(
-  freelist_heap
+  talc_heap
   SRCS
-    freelist_heap.cpp
+    talc_heap.cpp
   HDRS
-    freelist_heap.h
-  COMPILE_OPTIONS
-    ${libc_freelist_malloc_size}
+    talc_heap.h
   DEPENDS
+    libc.src.__support.CPP.array
+    libc.src.__support.CPP.bit
+    libc.src.__support.CPP.optional
+    libc.src.__support.CPP.span
+    libc.src.__support.libc_assert
+    libc.src.__support.OSUtil.osutil
+    libc.src.__support.integer_to_string
+    libc.src.string.memory_utils.inline_memcpy
+    libc.src.string.memory_utils.inline_memset
+)
+
+set(LIBC_ALLOCATOR "freelist" CACHE STRING "Allocator to use for baremetal malloc (freelist or talc)")
+set_property(CACHE LIBC_ALLOCATOR PROPERTY STRINGS "freelist" "talc")
+
+libc_set_definition(libc_freelist_malloc_size "LIBC_FREELIST_MALLOC_SIZE=${LIBC_CONF_FREELIST_MALLOC_BUFFER_SIZE}")
+
+set(freelist_heap_compile_options ${libc_freelist_malloc_size})
+set(freelist_heap_depends
     .block
     .freelist
     .freestore
@@ -80,6 +95,23 @@ add_object_library(
     libc.src.__support.libc_assert
     libc.src.string.memory_utils.inline_memcpy
     libc.src.string.memory_utils.inline_memset
+)
+
+if(LIBC_ALLOCATOR STREQUAL "talc")
+  list(APPEND freelist_heap_compile_options "-DLIBC_USE_TALC_ALLOCATOR")
+  list(APPEND freelist_heap_depends .talc_heap)
+endif()
+
+add_object_library(
+  freelist_heap
+  SRCS
+    freelist_heap.cpp
+  HDRS
+    freelist_heap.h
+  COMPILE_OPTIONS
+    ${freelist_heap_compile_options}
+  DEPENDS
+    ${freelist_heap_depends}
 )
 
 add_header_library(
