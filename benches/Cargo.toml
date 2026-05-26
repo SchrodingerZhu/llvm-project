@@ -16,6 +16,7 @@ publish = false
 fastrand = "2.0"
 spinning_top = "0.3"
 flat_tlsf = { path = "../flat_tlsf" }
+flat_tlsf2 = { path = "../flat_tlsf2" }
 talc = { path = "../../talc/talc", default-features = false }
 memory-stats = "1.2.0"
 good_memory_allocator = { version = "0.1", features = ["spin", "allocator"] }
@@ -24,3 +25,4 @@ dlmalloc = { version = "0.2", default-features = false, features = ["global"] }
 rlsf = "0.2"
 mimalloc = "0.1.46"
 jemallocator = "0.5.4"
+pprof = { version = "0.13", features = ["flamegraph"] }

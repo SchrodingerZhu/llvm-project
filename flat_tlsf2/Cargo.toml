@@ -1,0 +1,25 @@
+#===----------------------------------------------------------------------===#
+#
+# Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+#
+#===----------------------------------------------------------------------===#
+
+[package]
+name = "flat_tlsf2"
+version = "0.1.0"
+edition = "2021"
+authors = ["Yifan Zhu <yfzhu@google.com>"]
+description = "Safe Rust FFI wrapper package around llvm-libc C++ FlatTlsfHeap2 memory allocator"
+links = "flat_tlsf2_ffi"
+
+[dependencies]
+spinning_top = "0.3"
+
+[build-dependencies]
+cc = { version = "1.0", features = ["parallel"] }
+
+[features]
+allocator-api = []
+default = []

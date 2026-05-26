@@ -115,7 +115,7 @@ pub struct EmpiricalData {
     death_sampler: AdjustableSampler,
     
     // Trace player structures
-    trace: Vec<TraceAction>,
+    pub trace: Vec<TraceAction>,
     birth_pointers: Vec<*mut u8>,
     death_pointers: Vec<*mut u8>,
 }

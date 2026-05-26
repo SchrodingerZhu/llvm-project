@@ -8,14 +8,19 @@
 
 fn main() {
     let mut build = cc::Build::new();
+    build.compiler("clang++");
     build.cpp(true)
-        .std("c++17")
-        .file("src/cpp/flat_tlsf_ffi.cpp")
-        .file("src/cpp/vendor/freelist.cpp")
-        .file("src/cpp/vendor/freetrie.cpp")
-        .include("src/cpp")
-        .include("src/cpp/vendor")
-        .flag("-O3");
+         .std("c++17")
+         .file("src/cpp/flat_tlsf_ffi.cpp")
+         .file("src/cpp/vendor/freelist.cpp")
+         .file("src/cpp/vendor/freetrie.cpp")
+         .include("src/cpp")
+         .include("src/cpp/vendor")
+         .flag("-O3")
+         .flag("-g")
+         .flag("-fomit-frame-pointer")
+         .flag("-march=native")
+         .flag("-flto=thin");
 
 
 

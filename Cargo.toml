@@ -9,12 +9,14 @@
 [workspace]
 members = [
     "flat_tlsf",
+    "flat_tlsf2",
     "benches",
     "fuzz",
 ]
 resolver = "2"
 
 [profile.release]
-lto = "fat"
-codegen-units = 1
+lto = "thin"
+codegen-units = 16
 panic = "abort"
+debug = true

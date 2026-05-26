@@ -19,7 +19,7 @@ Shows the throughput rate (Million Operations / Second) of random memory operati
 Measures the peak memory capacity utilization percentage achieved by continuous block allocations prior to triggering target OOM (Out-of-Memory) conditions. Higher percentages represent superior best-fit search behaviors and lower fragmentation metadata overheads.
 
 > [!NOTE]
-> **Random Action Seed**: `2527367724496820496` (ensures identical allocation sequences across all compared allocators for reproducibility)
+> **Random Action Seed**: `12182759503014610549` (ensures identical allocation sequences across all compared allocators for reproducibility)
 
 ![Heap Space Efficiency](heap_efficiency.png)
 

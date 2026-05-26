@@ -42,6 +42,7 @@ pub const ARENA_ALLOCATORS: &[NamedAllocator] = &[
     NamedAllocator { name: "DLmalloc", init_fn: init_dlmalloc },
     NamedAllocator { name: "Talc", init_fn: init_talc },
     NamedAllocator { name: "FlatTlsf (FFI)", init_fn: init_flat_tlsf },
+    NamedAllocator { name: "FlatTlsf2 (FFI)", init_fn: init_flat_tlsf2 },
     NamedAllocator { name: "FreeList (FFI)", init_fn: init_freelist },
     NamedAllocator { name: "RLSF", init_fn: init_rlsf },
     NamedAllocator { name: "Galloc", init_fn: init_galloc },
@@ -100,12 +101,19 @@ impl<'a> Drop for AllocationWrapper<'a> {
 }
 
 static FLAT_TLSF_GLOBAL: flat_tlsf::FlatTlsfGlobal = flat_tlsf::FlatTlsfGlobal::empty();
+static FLAT_TLSF2_GLOBAL: flat_tlsf2::FlatTlsfGlobal = flat_tlsf2::FlatTlsfGlobal::empty();
 static FREELIST_GLOBAL: flat_tlsf::FreeListGlobal = flat_tlsf::FreeListGlobal::empty();
 
 unsafe fn init_flat_tlsf() -> Box<dyn GlobalAlloc + Sync> {
     let slice = std::slice::from_raw_parts_mut(&raw mut HEAP.0 as *mut u8, HEAP_SIZE);
     FLAT_TLSF_GLOBAL.init(slice);
     Box::new(RefAllocator(&FLAT_TLSF_GLOBAL))
+}
+
+unsafe fn init_flat_tlsf2() -> Box<dyn GlobalAlloc + Sync> {
+    let slice = std::slice::from_raw_parts_mut(&raw mut HEAP.0 as *mut u8, HEAP_SIZE);
+    FLAT_TLSF2_GLOBAL.init(slice);
+    Box::new(RefAllocator(&FLAT_TLSF2_GLOBAL))
 }
 
 unsafe fn init_freelist() -> Box<dyn GlobalAlloc + Sync> {

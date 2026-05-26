@@ -19,10 +19,18 @@ cargo-fuzz = true
 libfuzzer-sys = "0.4"
 arbitrary = { version = "1.3", features = ["derive"] }
 flat_tlsf = { path = "../flat_tlsf" }
+flat_tlsf2 = { path = "../flat_tlsf2" }
 
 [[bin]]
 name = "flat_tlsf_fuzz"
 path = "fuzz_targets/flat_tlsf_fuzz.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "flat_tlsf2_fuzz"
+path = "fuzz_targets/flat_tlsf2_fuzz.rs"
 test = false
 doc = false
 bench = false
