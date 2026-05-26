@@ -170,7 +170,7 @@ unsafe fn init_buddy_alloc() -> Box<dyn GlobalAlloc + Sync> {
 
 unsafe fn init_dlmalloc() -> Box<dyn GlobalAlloc + Sync> {
     let dl = DlMallocator(Mutex::new(dlmalloc::Dlmalloc::new_with_allocator(DlmallocArena(
-        std::sync::atomic::AtomicUsize::new(0),
+        std::sync::atomic::AtomicBool::new(true),
     ))));
     Box::new(dl)
 }
@@ -209,28 +209,14 @@ unsafe impl GlobalAlloc for DlMallocator {
     }
 }
 
-struct DlmallocArena(std::sync::atomic::AtomicUsize);
+struct DlmallocArena(std::sync::atomic::AtomicBool);
 unsafe impl dlmalloc::Allocator for DlmallocArena {
-    fn alloc(&self, size: usize) -> (*mut u8, usize, u32) {
-        // Round up size to standard page alignment (4096 bytes)
-        let size = (size + 4095) & !4095;
-        let mut current = self.0.load(core::sync::atomic::Ordering::SeqCst);
-        loop {
-            if current + size > HEAP_SIZE {
-                return (core::ptr::null_mut(), 0, 0);
-            }
-            match self.0.compare_exchange_weak(
-                current,
-                current + size,
-                core::sync::atomic::Ordering::SeqCst,
-                core::sync::atomic::Ordering::SeqCst,
-            ) {
-                Ok(_) => {
-                    let ptr = unsafe { (&raw mut HEAP.0[0] as *mut u8).add(current) };
-                    return (ptr, size, 1);
-                }
-                Err(actual) => current = actual,
-            }
+    fn alloc(&self, _size: usize) -> (*mut u8, usize, u32) {
+        let has_data = self.0.fetch_and(false, core::sync::atomic::Ordering::SeqCst);
+        if has_data {
+            (unsafe { &raw mut HEAP.0[0] }, HEAP_SIZE, 1)
+        } else {
+            (core::ptr::null_mut(), 0, 0)
         }
     }
     fn remap(&self, _ptr: *mut u8, _oldsize: usize, _newsize: usize, _can_move: bool) -> *mut u8 {

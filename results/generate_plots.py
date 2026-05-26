@@ -136,6 +136,16 @@ def plot_tcmalloc_replay():
 def generate_compare_markdown(has_ra, has_he, has_mb, has_tcm):
     md_path = os.path.join(RESULTS_DIR, "compare.md")
     
+    seed_str = ""
+    seed_path = os.path.join(RESULTS_DIR, "heap-efficiency-seed.txt")
+    if os.path.exists(seed_path):
+        try:
+            with open(seed_path, "r") as f:
+                seed_val = f.read().strip()
+                seed_str = f"> [!NOTE]\n> **Random Action Seed**: `{seed_val}` (ensures identical allocation sequences across all compared allocators for reproducibility)\n\n"
+        except Exception as e:
+            print(f"Error reading seed: {e}")
+
     md_content = """# 📊 Allocators Performance & Space Density Comparison Report
 
 This report presents a comprehensive multi-dimensional comparison study between the C++ FFI-wrapped allocators, native Rust targets, and standard system memory allocators.
@@ -159,15 +169,15 @@ Shows the throughput rate (Million Operations / Second) of random memory operati
 """
 
     if has_he:
-        md_content += """## 🗆 2. Heap Space Packing Density (Utilization %)
+        md_content += f"""## 🗆 2. Heap Space Packing Density (Utilization %)
 Measures the peak memory capacity utilization percentage achieved by continuous block allocations prior to triggering target OOM (Out-of-Memory) conditions. Higher percentages represent superior best-fit search behaviors and lower fragmentation metadata overheads.
 
-![Heap Space Efficiency](heap_efficiency.png)
+{seed_str}![Heap Space Efficiency](heap_efficiency.png)
 
 *Key Insights*:
-* **DLmalloc** and **RLSF** lead memory packing limits close to 97%.
-* **Talc** achieves a stellar **95.21%** spatial density.
-* **FlatTlsf (FFI)** matches the baseline **FreeList (FFI)** at **83.95%**, reflecting the shared physical C-linkage size header and tag layout parameters constraints.
+* **DLmalloc** and **RLSF** lead memory packing limits close to **97%**.
+* **Talc** achieves a stellar **95.2%** spatial density.
+* **FlatTlsf (FFI)** matches the baseline **FreeList (FFI)** at around **84%**, reflecting the shared physical C-linkage size header and tag layout parameters constraints.
 
 ---
 

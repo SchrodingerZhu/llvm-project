@@ -10,6 +10,17 @@ fn main() {
     let benchmark_results_dir = cargo_manifest_dir.join("../results");
     std::fs::create_dir_all(&benchmark_results_dir).unwrap();
 
+    let seed = std::env::var("SEED")
+        .ok()
+        .and_then(|s| s.parse::<u64>().ok())
+        .unwrap_or_else(|| {
+            fastrand::u64(..)
+        });
+    eprintln!("Using random seed: {}", seed);
+
+    let seed_file_path = benchmark_results_dir.join("heap-efficiency-seed.txt");
+    std::fs::write(seed_file_path, seed.to_string()).unwrap();
+
     let mut csv = String::new();
 
     for named_allocator in ARENA_ALLOCATORS.iter() {
@@ -23,6 +34,10 @@ fn main() {
         eprintln!("Benchmarking {}...", named_allocator.name);
 
         let allocator = unsafe { (named_allocator.init_fn)() };
+        
+        // Reset seed for this allocator run to ensure they all face the same actions
+        fastrand::seed(seed);
+        
         let efficiency = heap_efficiency(allocator.as_ref());
 
         write!(csv, "{},", efficiency).unwrap();

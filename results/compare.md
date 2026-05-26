@@ -18,12 +18,15 @@ Shows the throughput rate (Million Operations / Second) of random memory operati
 ## 🗆 2. Heap Space Packing Density (Utilization %)
 Measures the peak memory capacity utilization percentage achieved by continuous block allocations prior to triggering target OOM (Out-of-Memory) conditions. Higher percentages represent superior best-fit search behaviors and lower fragmentation metadata overheads.
 
+> [!NOTE]
+> **Random Action Seed**: `2527367724496820496` (ensures identical allocation sequences across all compared allocators for reproducibility)
+
 ![Heap Space Efficiency](heap_efficiency.png)
 
 *Key Insights*:
-* **DLmalloc** and **RLSF** lead memory packing limits close to 97%.
-* **Talc** achieves a stellar **95.21%** spatial density.
-* **FlatTlsf (FFI)** matches the baseline **FreeList (FFI)** at **83.95%**, reflecting the shared physical C-linkage size header and tag layout parameters constraints.
+* **DLmalloc** and **RLSF** lead memory packing limits close to **97%**.
+* **Talc** achieves a stellar **95.2%** spatial density.
+* **FlatTlsf (FFI)** matches the baseline **FreeList (FFI)** at around **84%**, reflecting the shared physical C-linkage size header and tag layout parameters constraints.
 
 ---
 
