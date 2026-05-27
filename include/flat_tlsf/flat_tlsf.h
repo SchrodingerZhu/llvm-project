@@ -1,11 +1,15 @@
 #ifndef FLAT_TLSF_FLAT_TLSF_H_
 #define FLAT_TLSF_FLAT_TLSF_H_
 
+#include <algorithm>
 #include <array>
 #include <bit>
+#include <cassert>
 #include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <optional>
+#include <utility>
 
 namespace flat_tlsf {
 
@@ -68,7 +72,7 @@ inline Byte *saturating_ptr_add(Byte *ptr, size_t bytes) {
 
 } // namespace bit_utils
 
-struct BitField {
+struct alignas(16) BitField {
   static constexpr size_t BITS_PER_ELEMENT = 8 * sizeof(size_t);
   static constexpr size_t NUMBER_OF_ELEMENTS = 3;
   static constexpr size_t BITS = BITS_PER_ELEMENT * NUMBER_OF_ELEMENTS;
@@ -113,7 +117,7 @@ struct BitField {
 };
 
 struct Binning {
-  static constexpr size_t BIT_COUNT = BitField::BITS - 1;
+  static constexpr size_t BIN_COUNT = BitField::BITS - 1;
 
   /// A fast binning algorithm with relatively even coverage and configurable
   /// behavior.
@@ -270,11 +274,27 @@ inline void set_end_flag(Byte *ptr) { *ptr ^= HEAP_END_FLAG; }
 inline void clear_end_flag(Byte *ptr) { *ptr ^= HEAP_END_FLAG; }
 }; // namespace tag
 
-struct Node {};
+struct Node {
+  Node* next;
+  // use next_of_prev to avoid branches on special
+  // guardian pointer
+  Node** next_of_prev;
+
+  Node** addr_of_next() { return &next; }
+  void link_at(Node data) {
+    *this = data;
+    *data.next_of_prev = this;
+    if (data.next) data.next->next_of_prev = addr_of_next();
+  }
+  void unlink() {
+    *next_of_prev = next;
+    if (next) next->next_of_prev = next_of_prev;
+  }
+};
 
 namespace chunk {
 inline bool is_chunk_size(Byte *base, Byte *end) {
-  return end - base >= CHUNK_UNIT;
+  return end >= base + CHUNK_UNIT;
 }
 inline size_t required_chunk_size(size_t size) {
   size_t size_with_tag = size + 1;
@@ -319,8 +339,284 @@ inline Byte *align_up(Byte *ptr) {
 inline Byte *align_down(Byte *ptr) {
   return bit_utils::align_down_by(ptr, CHUNK_UNIT);
 }
-} // namespace chunk
 
-} // namespace flat_tlsf
+template <class T>
+inline T read_word(const void* ptr) {
+  T buffer;
+  __builtin_memcpy_inline(&buffer, ptr, sizeof(T));
+  return buffer;
+}
+
+template <class T>
+inline void write_word(void* ptr, T value) {
+  __builtin_memcpy_inline(ptr, &value, sizeof(T));
+}
+
+template <class T, class F>
+inline void update(void* ptr, F&& f) {
+  write_word<T>(ptr, f(read_word<T>(ptr)));
+}
+}  // namespace chunk
+
+class Heap {
+  BitField available;
+  Node** gap_list;
+  void* heap_base;
+  size_t heap_size;
+
+ public:
+  // Add an area to be managed by the heap
+  Byte* claim(Byte* base, size_t size) {
+    // Check if `base + size` overflows. If so, that's okay, just claim up to
+    // the top. Currently we never claim the last CHUNK_UNIT of memory. Talc
+    // could be changed to be able to use them (i.e. support the end wrapping to
+    // NULL) however
+    // 1. Dealing with this correctly throughout the allocator is very tricky.
+    // 2. It's not easy to verify that this code works as intended.
+    // 3. I doubt anyone really cares much about those last few bytes of the
+    // address space.
+    //     It's common practice to put a guard page or something similar there
+    //     anyway. The main exception I'm aware of is WebAssembly, which has no
+    //     qualms with you using the entire linear address space.
+    Byte* heap_end =
+        chunk::align_down(bit_utils::saturating_ptr_add(base, size));
+    Byte* heap_base;
+    Byte* gap_base;
+
+    // Gap lists haven't been initialized
+    if (gap_list == nullptr) {
+      base = std::max(std::bit_cast<Byte*>(uintptr_t{1}), base);
+      heap_base = bit_utils::align_up_by(base, alignof(Node*));
+      size_t gap_list_size = sizeof(Node*) * Binning::BIN_COUNT;
+      gap_base = chunk::align_up(heap_base + gap_list_size + sizeof(Byte));
+
+      // if calculating gap_base overflowed OR the gap_base is higher than
+      // heap_end there isn't enough memory to allocate the metadata and cap it
+      // off with a tag
+      if (gap_base < heap_base || heap_end < gap_base) return nullptr;
+
+      Byte tag = tag::ALLOCATED_FLAG;
+      if (gap_base < heap_end) tag |= tag::ABOVE_FREE_FLAG;
+      chunk::write_word(chunk::end_to_tag(gap_base), tag);
+      gap_list = reinterpret_cast<Node**>(gap_base);
+      for (size_t i = 0; i < Binning::BIN_COUNT; ++i) gap_list[i] = nullptr;
+    } else {
+      // Note that adding the header size and aligning up automatically dodges
+      // the possibility of claiming null, if `memory` started at null.
+      gap_base = chunk::align_up(base + sizeof(Byte));
+
+      // if calculating gap_base overflowed OR there isn't a CHUNK_UNIT between
+      // gap_base and heap_end, then there isn't enough memory to claim
+      if (gap_base + CHUNK_UNIT < base || heap_end < gap_base + CHUNK_UNIT)
+        return nullptr;
+
+      heap_base = chunk::end_to_tag(gap_base);
+      chunk::write_word(heap_base, tag::ALLOCATED_FLAG | tag::ABOVE_FREE_FLAG |
+                                       tag::HEAP_BASE_FLAG);
+    }
+    if (gap_base < heap_end) {
+      register_gap(gap_base, heap_end);
+      chunk::update<size_t>(
+          chunk::gap_end_to_size_and_flag(heap_end),
+          [](size_t val) { return val | tag::HEAP_END_FLAG; });
+    }
+
+    return heap_end;
+  }
+
+ private:
+  void register_gap(Byte* base, Byte* end) {
+    assert(chunk::is_chunk_size(base, end));
+
+    size_t size = end - base;
+    uint32_t bin = std::min(Binning::size_to_bin(size),
+                            static_cast<uint32_t>(Binning::BIN_COUNT - 1));
+    Node** bin_ptr = &gap_list[bin];
+
+    if (*bin_ptr == nullptr) {
+      assert(!available.read_bit(bin));
+      available.set_bit(bin);
+    }
+
+    chunk::gap_base_to_node(base)->link_at(Node{*bin_ptr, bin_ptr});
+    chunk::write_word(chunk::gap_base_to_bin(base), bin);
+    chunk::write_word(chunk::gap_base_to_size(base), size);
+    chunk::write_word(chunk::gap_end_to_size_and_flag(end), size);
+
+    assert(*bin_ptr != nullptr);
+  }
+
+  void deregister_gap(Byte* base, size_t size) {
+    assert(gap_list[std::min(Binning::size_to_bin(size),
+                             static_cast<uint32_t>(Binning::BIN_COUNT - 1))] !=
+           nullptr);
+
+    chunk::gap_base_to_node(base)->unlink();
+
+    uint32_t bin = chunk::read_word<uint32_t>(chunk::gap_base_to_bin(base));
+    if (gap_list[bin] == nullptr) {
+      assert(available.read_bit(bin));
+      available.clear_bit(bin);
+    }
+  }
+
+  std::optional<std::pair<Byte*, Byte*>> full_search_bin(uint32_t bin,
+                                                         size_t required_size,
+                                                         size_t align_mask) {
+    for (Node* node = gap_list[bin]; node != nullptr; node = node->next) {
+      size_t size = chunk::read_word<size_t>(chunk::gap_node_to_size(node));
+      size &= ~tag::HEAP_END_FLAG;
+      Byte* base = chunk::gap_node_to_base(node);
+      Byte* end = base + size;
+      Byte* aligned_base = bit_utils::align_up_by_mask(base, align_mask);
+      if (aligned_base + required_size <= end) {
+        deregister_gap(base, size);
+        if (base != aligned_base)
+          register_gap(base, aligned_base);
+        else
+          tag::clear_above_free(chunk::end_to_tag(base));
+        return std::make_pair(aligned_base, end);
+      }
+    }
+
+    return std::nullopt;
+  }
+
+  Byte* allocate(size_t required_size, size_t required_align) {
+    size_t required_chunk_size = chunk::required_chunk_size(required_size);
+    auto search = [&, this]() -> std::pair<Byte*, Byte*> {
+      while (true) {
+        // This is allowed to return values >= B::BIN_COUNT.
+        // This indicates that the last bucket is our only bet,
+        // and the allocations therein are not necessarily big enough.
+        size_t bin = Binning::size_to_bin_ceil(
+            std::max(required_chunk_size, required_align));
+
+        // special case, this is a large allocation, dig around the last bin
+        if (bin >= Binning::BIN_COUNT - 1) {
+          if (available.read_bit(Binning::BIN_COUNT - 1)) {
+            if (auto result =
+                    full_search_bin(Binning::BIN_COUNT - 1, required_chunk_size,
+                                    required_align - 1))
+              return *result;
+          }
+          return {nullptr, nullptr};
+        }
+
+        size_t bit = available.bit_scan_after(bin);
+        // Handle the case where it turns out there's no feasible bins
+        // available.
+        if (bit >= Binning::BIN_COUNT) {
+          if (available.read_bit(bin - 1)) {
+            if (auto result = full_search_bin(bin - 1, required_chunk_size,
+                                              required_align - 1))
+              return *result;
+          }
+          return {nullptr, nullptr};
+        }
+
+        if (required_align <= CHUNK_UNIT) {
+          Node* node_ptr = gap_list[bit];
+          size_t size =
+              chunk::read_word<size_t>(chunk::gap_node_to_size(node_ptr));
+          size &= ~tag::HEAP_END_FLAG;
+          assert(size >= required_chunk_size);
+          Byte* base = chunk::gap_node_to_base(node_ptr);
+          deregister_gap(base, size);
+          tag::clear_above_free(chunk::end_to_tag(base));
+          return {base, base + size};
+        } else {
+          // a larger than CHUNK_UNIT alignment is demanded
+          // therefore each chunk is manually checked to be sufficient
+          // accordingly
+          size_t align_mask = required_align - 1;
+          while (true) {
+            if (auto result =
+                    full_search_bin(bit, required_chunk_size, align_mask))
+              return *result;
+            if (bit + 1 < Binning::BIN_COUNT ||
+                BitField::BITS > Binning::BIN_COUNT) {
+              bit = available.bit_scan_after(bit + 1);
+              if (bit < Binning::BIN_COUNT) continue;
+            }
+            if (auto res =
+                    full_search_bin(bin - 1, required_chunk_size, align_mask))
+              return *res;
+
+            return {nullptr, nullptr};
+          }
+        }
+      }
+    };
+    auto [base, chunk_end] = search();
+    if (base == nullptr) return nullptr;
+    assert(chunk::align_down(base) == base);
+
+    Byte* end = base + required_chunk_size;
+    Byte tag = tag::ALLOCATED_FLAG;
+    size_t* flag_ptr = chunk::gap_end_to_size_and_flag(chunk_end);
+    size_t size_and_flag = chunk::read_word<size_t>(flag_ptr);
+    if (size_and_flag & tag::HEAP_END_FLAG) {
+      if (end != chunk_end) {
+        register_gap(end, chunk_end);
+        chunk::update<size_t>(
+            flag_ptr, [](size_t val) { return val |= tag::HEAP_END_FLAG; });
+        tag |= tag::ABOVE_FREE_FLAG;
+      } else {
+        tag |= tag::HEAP_END_FLAG;
+      }
+    } else {
+      if (end != chunk_end) {
+        register_gap(end, chunk_end);
+        tag |= tag::ABOVE_FREE_FLAG;
+      }
+    }
+
+    chunk::write_word(chunk::end_to_tag(end), tag);
+    return base;
+  }
+
+  void deallocate(Byte* ptr, size_t required_size, size_t required_align) {
+    Byte* chunk_base = ptr;
+    Byte* chunk_end = chunk::alloc_to_end(chunk_base, required_size);
+    Byte tag = chunk::read_word<Byte>(chunk::end_to_tag(chunk_end));
+    bool is_heap_end = tag::is_heap_end(tag);
+    assert(tag::is_allocated(tag));
+    assert(chunk::is_chunk_size(chunk_base, chunk_end));
+    // Try to recombine with a gap below, if it's there.
+    // This gap is never the end of the heap, so we don't need to worry about
+    // the presence of an end flag.
+    Byte* below_tag_ptr = chunk::end_to_tag(chunk_base);
+    if (tag::is_allocated(chunk::read_word<Byte>(below_tag_ptr))) {
+      size_t below_size =
+          chunk::read_word<size_t>(chunk::gap_end_to_size_and_flag(chunk_base));
+      assert(!(below_size & tag::HEAP_END_FLAG));
+      Byte* below_base = chunk_base - below_size;
+      deregister_gap(below_base, below_size);
+      chunk_base = below_base;
+    } else {
+      tag::set_above_free(below_tag_ptr);
+    }
+
+    // Try to recombine with a gap above, if it's there.
+    // The end flag is never clobbered by this operation, so we can still read
+    // it later.
+    if (tag::is_above_free(tag)) {
+      assert(!tag::is_heap_end(tag));
+      size_t above_size =
+          chunk::read_word<size_t>(chunk::gap_base_to_size(chunk_end));
+      above_size &= ~tag::HEAP_END_FLAG;
+      deregister_gap(chunk_end, above_size);
+      chunk_end += above_size;
+      size_t size_and_flag =
+          chunk::read_word<size_t>(chunk::gap_end_to_size_and_flag(chunk_end));
+      is_heap_end = size_and_flag & tag::HEAP_END_FLAG;
+    }
+
+    register_gap(chunk_base, chunk_end);
+  }
+};
+
+}  // namespace flat_tlsf
 
 #endif // FLAT_TLSF_FLAT_TLSF_H_
