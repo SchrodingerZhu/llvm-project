@@ -1,6 +1,7 @@
 add_executable(flat_tlsf_test
   binning.cc
   bitfield.cc
+  heap.cc
   node.cc
   tag.cc
 )

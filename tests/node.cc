@@ -13,55 +13,65 @@ TEST(NodeTest, BasicOperations) {
   z->link_at(Node{y, x->addr_of_next()});
 
   {
-    auto iter = x->begin();
-    ASSERT_NE(iter, x->end());
-    EXPECT_EQ(*iter, x);
-    ASSERT_NE(++iter, x->end());
-    EXPECT_EQ(*iter, z);
-    ASSERT_NE(++iter, x->end());
-    EXPECT_EQ(*iter, y);
-    EXPECT_EQ(++iter, x->end());
+    Node* curr = x;
+    ASSERT_NE(curr, nullptr);
+    EXPECT_EQ(curr, x);
+    curr = curr->next;
+    ASSERT_NE(curr, nullptr);
+    EXPECT_EQ(curr, z);
+    curr = curr->next;
+    ASSERT_NE(curr, nullptr);
+    EXPECT_EQ(curr, y);
+    curr = curr->next;
+    EXPECT_EQ(curr, nullptr);
   }
 
   {
-    auto iter = y->begin();
-    ASSERT_NE(iter, y->end());
-    EXPECT_EQ(*iter, y);
-    EXPECT_EQ(++iter, y->end());
+    Node* curr = y;
+    ASSERT_NE(curr, nullptr);
+    EXPECT_EQ(curr, y);
+    curr = curr->next;
+    EXPECT_EQ(curr, nullptr);
   }
 
   z->unlink();
 
   {
-    auto iter = x->begin();
-    ASSERT_NE(iter, x->end());
-    EXPECT_EQ(*iter, x);
-    ASSERT_NE(++iter, x->end());
-    EXPECT_EQ(*iter, y);
-    EXPECT_EQ(++iter, x->end());
+    Node* curr = x;
+    ASSERT_NE(curr, nullptr);
+    EXPECT_EQ(curr, x);
+    curr = curr->next;
+    ASSERT_NE(curr, nullptr);
+    EXPECT_EQ(curr, y);
+    curr = curr->next;
+    EXPECT_EQ(curr, nullptr);
   }
 
   z->link_at(Node{y, x->addr_of_next()});
 
   {
-    auto iter = x->begin();
-    ASSERT_NE(iter, x->end());
-    EXPECT_EQ(*iter, x);
-    ASSERT_NE(++iter, x->end());
-    EXPECT_EQ(*iter, z);
-    ASSERT_NE(++iter, x->end());
-    EXPECT_EQ(*iter, y);
-    EXPECT_EQ(++iter, x->end());
+    Node* curr = x;
+    ASSERT_NE(curr, nullptr);
+    EXPECT_EQ(curr, x);
+    curr = curr->next;
+    ASSERT_NE(curr, nullptr);
+    EXPECT_EQ(curr, z);
+    curr = curr->next;
+    ASSERT_NE(curr, nullptr);
+    EXPECT_EQ(curr, y);
+    curr = curr->next;
+    EXPECT_EQ(curr, nullptr);
   }
 
   z->unlink();
   y->unlink();
 
   {
-    auto iter = x->begin();
-    ASSERT_NE(iter, x->end());
-    EXPECT_EQ(*iter, x);
-    EXPECT_EQ(++iter, x->end());
+    Node* curr = x;
+    ASSERT_NE(curr, nullptr);
+    EXPECT_EQ(curr, x);
+    curr = curr->next;
+    EXPECT_EQ(curr, nullptr);
   }
 
   delete x;

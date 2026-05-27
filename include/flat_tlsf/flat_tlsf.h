@@ -7,6 +7,7 @@
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <limits>
 #include <optional>
 #include <utility>
@@ -343,13 +344,13 @@ inline Byte *align_down(Byte *ptr) {
 template <class T>
 inline T read_word(const void* ptr) {
   T buffer;
-  __builtin_memcpy_inline(&buffer, ptr, sizeof(T));
+  std::memcpy(&buffer, ptr, sizeof(T));
   return buffer;
 }
 
 template <class T>
 inline void write_word(void* ptr, T value) {
-  __builtin_memcpy_inline(ptr, &value, sizeof(T));
+  std::memcpy(ptr, &value, sizeof(T));
 }
 
 template <class T, class F>
@@ -359,10 +360,10 @@ inline void update(void* ptr, F&& f) {
 }  // namespace chunk
 
 class Heap {
-  BitField available;
-  Node** gap_list;
-  void* heap_base;
-  size_t heap_size;
+  BitField available = {};
+  Node** gap_list = nullptr;
+  void* heap_base = nullptr;
+  size_t heap_size = 0;
 
  public:
   // Add an area to be managed by the heap
@@ -398,7 +399,7 @@ class Heap {
       Byte tag = tag::ALLOCATED_FLAG;
       if (gap_base < heap_end) tag |= tag::ABOVE_FREE_FLAG;
       chunk::write_word(chunk::end_to_tag(gap_base), tag);
-      gap_list = reinterpret_cast<Node**>(gap_base);
+      gap_list = reinterpret_cast<Node**>(heap_base);
       for (size_t i = 0; i < Binning::BIN_COUNT; ++i) gap_list[i] = nullptr;
     } else {
       // Note that adding the header size and aligning up automatically dodges
@@ -416,9 +417,6 @@ class Heap {
     }
     if (gap_base < heap_end) {
       register_gap(gap_base, heap_end);
-      chunk::update<size_t>(
-          chunk::gap_end_to_size_and_flag(heap_end),
-          [](size_t val) { return val | tag::HEAP_END_FLAG; });
     }
 
     return heap_end;
@@ -465,7 +463,7 @@ class Heap {
                                                          size_t align_mask) {
     for (Node* node = gap_list[bin]; node != nullptr; node = node->next) {
       size_t size = chunk::read_word<size_t>(chunk::gap_node_to_size(node));
-      size &= ~tag::HEAP_END_FLAG;
+
       Byte* base = chunk::gap_node_to_base(node);
       Byte* end = base + size;
       Byte* aligned_base = bit_utils::align_up_by_mask(base, align_mask);
@@ -481,6 +479,13 @@ class Heap {
 
     return std::nullopt;
   }
+
+ public:
+  Node* get_gap_list_head(uint32_t bin) const { return gap_list[bin]; }
+  Node** get_gap_list_ptr(uint32_t bin) const { return &gap_list[bin]; }
+  const BitField& get_available() const { return available; }
+  Node** get_gap_list() const { return gap_list; }
+  void test_deregister_gap(Byte* base, size_t size) { deregister_gap(base, size); }
 
   Byte* allocate(size_t required_size, size_t required_align) {
     size_t required_chunk_size = chunk::required_chunk_size(required_size);
@@ -519,7 +524,7 @@ class Heap {
           Node* node_ptr = gap_list[bit];
           size_t size =
               chunk::read_word<size_t>(chunk::gap_node_to_size(node_ptr));
-          size &= ~tag::HEAP_END_FLAG;
+
           assert(size >= required_chunk_size);
           Byte* base = chunk::gap_node_to_base(node_ptr);
           deregister_gap(base, size);
@@ -554,22 +559,9 @@ class Heap {
 
     Byte* end = base + required_chunk_size;
     Byte tag = tag::ALLOCATED_FLAG;
-    size_t* flag_ptr = chunk::gap_end_to_size_and_flag(chunk_end);
-    size_t size_and_flag = chunk::read_word<size_t>(flag_ptr);
-    if (size_and_flag & tag::HEAP_END_FLAG) {
-      if (end != chunk_end) {
-        register_gap(end, chunk_end);
-        chunk::update<size_t>(
-            flag_ptr, [](size_t val) { return val |= tag::HEAP_END_FLAG; });
-        tag |= tag::ABOVE_FREE_FLAG;
-      } else {
-        tag |= tag::HEAP_END_FLAG;
-      }
-    } else {
-      if (end != chunk_end) {
-        register_gap(end, chunk_end);
-        tag |= tag::ABOVE_FREE_FLAG;
-      }
+    if (end != chunk_end) {
+      register_gap(end, chunk_end);
+      tag |= tag::ABOVE_FREE_FLAG;
     }
 
     chunk::write_word(chunk::end_to_tag(end), tag);
@@ -580,17 +572,17 @@ class Heap {
     Byte* chunk_base = ptr;
     Byte* chunk_end = chunk::alloc_to_end(chunk_base, required_size);
     Byte tag = chunk::read_word<Byte>(chunk::end_to_tag(chunk_end));
-    bool is_heap_end = tag::is_heap_end(tag);
+
     assert(tag::is_allocated(tag));
     assert(chunk::is_chunk_size(chunk_base, chunk_end));
     // Try to recombine with a gap below, if it's there.
     // This gap is never the end of the heap, so we don't need to worry about
     // the presence of an end flag.
     Byte* below_tag_ptr = chunk::end_to_tag(chunk_base);
-    if (tag::is_allocated(chunk::read_word<Byte>(below_tag_ptr))) {
+    if (!tag::is_allocated(chunk::read_word<Byte>(below_tag_ptr))) {
       size_t below_size =
           chunk::read_word<size_t>(chunk::gap_end_to_size_and_flag(chunk_base));
-      assert(!(below_size & tag::HEAP_END_FLAG));
+
       Byte* below_base = chunk_base - below_size;
       deregister_gap(below_base, below_size);
       chunk_base = below_base;
@@ -605,15 +597,92 @@ class Heap {
       assert(!tag::is_heap_end(tag));
       size_t above_size =
           chunk::read_word<size_t>(chunk::gap_base_to_size(chunk_end));
-      above_size &= ~tag::HEAP_END_FLAG;
       deregister_gap(chunk_end, above_size);
       chunk_end += above_size;
-      size_t size_and_flag =
-          chunk::read_word<size_t>(chunk::gap_end_to_size_and_flag(chunk_end));
-      is_heap_end = size_and_flag & tag::HEAP_END_FLAG;
     }
 
     register_gap(chunk_base, chunk_end);
+  }
+
+  bool try_grow_in_place(Byte* ptr, size_t old_size, size_t new_size) {
+    assert(new_size >= old_size);
+
+    Byte* old_end = chunk::alloc_to_end(ptr, old_size);
+    Byte* new_end = chunk::alloc_to_end(ptr, new_size);
+
+    if (old_end == new_end) return true;
+
+    Byte old_tag = chunk::read_word<Byte>(chunk::end_to_tag(old_end));
+    assert(tag::is_allocated(old_tag));
+
+    if (tag::is_above_free(old_tag)) {
+      size_t above_size =
+          chunk::read_word<size_t>(chunk::gap_base_to_size(old_end));
+      Byte* above_end = old_end + above_size;
+
+      if (new_end <= above_end) {
+        deregister_gap(old_end, above_size);
+
+        if (new_end != above_end) {
+          register_gap(new_end, above_end);
+          chunk::write_word(
+              chunk::end_to_tag(new_end),
+              static_cast<Byte>(tag::ALLOCATED_FLAG | tag::ABOVE_FREE_FLAG));
+        } else {
+          chunk::write_word(chunk::end_to_tag(new_end),
+                            static_cast<Byte>(tag::ALLOCATED_FLAG));
+        }
+
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  void shrink_in_place(Byte* ptr, size_t old_size, size_t new_size) {
+    assert(new_size != 0);
+    assert(new_size <= old_size);
+
+    Byte* chunk_end = chunk::alloc_to_end(ptr, old_size);
+    Byte* new_end = chunk::alloc_to_end(ptr, new_size);
+
+    if (new_end != chunk_end) {
+      Byte old_tag = chunk::read_word<Byte>(chunk::end_to_tag(chunk_end));
+
+      if (tag::is_above_free(old_tag)) {
+        size_t above_size =
+            chunk::read_word<size_t>(chunk::gap_base_to_size(chunk_end));
+        deregister_gap(chunk_end, above_size);
+        chunk_end += above_size;
+      }
+
+      register_gap(new_end, chunk_end);
+      chunk::write_word(
+          chunk::end_to_tag(new_end),
+          static_cast<Byte>(tag::ALLOCATED_FLAG | tag::ABOVE_FREE_FLAG));
+    }
+  }
+
+  bool try_reallocate_in_place(Byte* ptr, size_t old_size, size_t new_size) {
+    if (new_size > old_size) {
+      return try_grow_in_place(ptr, old_size, new_size);
+    } else if (new_size < old_size) {
+      shrink_in_place(ptr, old_size, new_size);
+      return true;
+    } else {
+      return true;
+    }
+  }
+
+  Byte* reallocate(Byte* ptr, size_t old_size, size_t old_align,
+                   size_t new_size, size_t new_align) {
+    if (try_reallocate_in_place(ptr, old_size, new_size)) return ptr;
+    Byte* new_ptr = allocate(new_size, new_align);
+    if (new_ptr == nullptr) return nullptr;
+    std::copy(ptr, ptr + old_size, new_ptr);
+    deallocate(ptr, old_size, old_align);
+    return new_ptr;
   }
 };
 
