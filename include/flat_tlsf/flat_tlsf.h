@@ -791,9 +791,7 @@ class Talc {
     }
 
     Byte* new_user_ptr = static_cast<Byte*>(aligned_alloc(shift, new_size));
-    if (new_user_ptr == nullptr) {
-      return nullptr;
-    }
+    if (new_user_ptr == nullptr) return nullptr;
 
     size_t old_user_size = old_chunk_size - shift - 1;
     size_t bytes_to_copy = std::min(old_user_size, new_size);
