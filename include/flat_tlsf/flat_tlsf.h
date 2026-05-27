@@ -358,11 +358,9 @@ inline void update(void* ptr, F&& f) {
 }
 }  // namespace chunk
 
-class Talc {
+class Heap {
   BitField available = {};
   Node** gap_list = nullptr;
-  void* heap_base = nullptr;
-  size_t heap_size = 0;
 
  public:
   // Add an area to be managed by the heap
@@ -490,72 +488,105 @@ class Talc {
 
   Byte* allocate(size_t required_size, size_t required_align) {
     size_t required_chunk_size = chunk::required_chunk_size(required_size);
-    auto search = [&, this]() -> std::pair<Byte*, Byte*> {
-      while (true) {
-        // This is allowed to return values >= B::BIN_COUNT.
-        // This indicates that the last bucket is our only bet,
-        // and the allocations therein are not necessarily big enough.
-        size_t bin = Binning::size_to_bin_ceil(
-            std::max(required_chunk_size, required_align));
+    Byte* base = nullptr;
+    Byte* chunk_end = nullptr;
 
-        // special case, this is a large allocation, dig around the last bin
-        if (bin >= Binning::BIN_COUNT - 1) {
-          if (available.read_bit(Binning::BIN_COUNT - 1)) {
-            if (auto result =
-                    full_search_bin(Binning::BIN_COUNT - 1, required_chunk_size,
-                                    required_align - 1))
-              return *result;
-          }
-          return {nullptr, nullptr};
-        }
+    size_t bin = Binning::size_to_bin_ceil(
+        std::max(required_chunk_size, required_align));
 
-        size_t bit = available.bit_scan_after(bin);
-        // Handle the case where it turns out there's no feasible bins
-        // available.
-        if (bit >= Binning::BIN_COUNT) {
-          if (available.read_bit(bin - 1)) {
-            if (auto result = full_search_bin(bin - 1, required_chunk_size,
-                                              required_align - 1))
-              return *result;
-          }
-          return {nullptr, nullptr};
-        }
-
-        if (required_align <= CHUNK_UNIT) {
-          Node* node_ptr = gap_list[bit];
-          size_t size =
-              chunk::read_word<size_t>(chunk::gap_node_to_size(node_ptr));
-
-          assert(size >= required_chunk_size);
-          Byte* base = chunk::gap_node_to_base(node_ptr);
-          deregister_gap(base, size);
-          tag::clear_above_free(chunk::end_to_tag(base));
-          return {base, base + size};
-        } else {
-          // a larger than CHUNK_UNIT alignment is demanded
-          // therefore each chunk is manually checked to be sufficient
-          // accordingly
-          size_t align_mask = required_align - 1;
-          while (true) {
-            if (auto result =
-                    full_search_bin(bit, required_chunk_size, align_mask))
-              return *result;
-            if (bit + 1 < Binning::BIN_COUNT ||
-                BitField::BITS > Binning::BIN_COUNT) {
-              bit = available.bit_scan_after(bit + 1);
-              if (bit < Binning::BIN_COUNT) continue;
-            }
-            if (auto res =
-                    full_search_bin(bin - 1, required_chunk_size, align_mask))
-              return *res;
-
-            return {nullptr, nullptr};
-          }
+    if (bin >= Binning::BIN_COUNT - 1) {
+      if (available.read_bit(Binning::BIN_COUNT - 1)) {
+        if (auto result =
+                full_search_bin(Binning::BIN_COUNT - 1, required_chunk_size,
+                                required_align - 1)) {
+          base = result->first;
+          chunk_end = result->second;
+          goto success;
         }
       }
-    };
-    auto [base, chunk_end] = search();
-    if (base == nullptr) return nullptr;
+      return nullptr;
+    }
+
+    {
+      size_t bit = available.bit_scan_after(bin);
+      if (bit >= Binning::BIN_COUNT) {
+        if (available.read_bit(bin - 1)) {
+          if (auto result = full_search_bin(bin - 1, required_chunk_size,
+                                            required_align - 1)) {
+            base = result->first;
+            chunk_end = result->second;
+            goto success;
+          }
+        }
+        return nullptr;
+      }
+
+      if (required_align <= CHUNK_UNIT) {
+        Node* node_ptr = gap_list[bit];
+        size_t size =
+            chunk::read_word<size_t>(chunk::gap_node_to_size(node_ptr));
+
+        assert(size >= required_chunk_size);
+        base = chunk::gap_node_to_base(node_ptr);
+        deregister_gap(base, size);
+        tag::clear_above_free(chunk::end_to_tag(base));
+        chunk_end = base + size;
+        goto success;
+      } else {
+        size_t align_mask = required_align - 1;
+        while (true) {
+          for (Node* node = gap_list[bit]; node != nullptr; node = node->next) {
+            size_t size =
+                chunk::read_word<size_t>(chunk::gap_node_to_size(node));
+            Byte* b = chunk::gap_node_to_base(node);
+            Byte* end = b + size;
+            Byte* aligned_base = bit_utils::align_up_by_mask(b, align_mask);
+            if (aligned_base + required_chunk_size <= end) {
+              deregister_gap(b, size);
+              if (b != aligned_base) {
+                register_gap(b, aligned_base);
+              } else {
+                tag::clear_above_free(chunk::end_to_tag(b));
+              }
+              base = aligned_base;
+              chunk_end = end;
+              goto success;
+            }
+          }
+
+          if (bit + 1 < Binning::BIN_COUNT ||
+              BitField::BITS > Binning::BIN_COUNT) {
+            bit = available.bit_scan_after(bit + 1);
+            if (bit < Binning::BIN_COUNT) continue;
+          }
+
+          // Inlined: full_search_bin(bin - 1, required_chunk_size, align_mask)
+          for (Node* node = gap_list[bin - 1]; node != nullptr;
+               node = node->next) {
+            size_t size =
+                chunk::read_word<size_t>(chunk::gap_node_to_size(node));
+            Byte* b = chunk::gap_node_to_base(node);
+            Byte* end = b + size;
+            Byte* aligned_base = bit_utils::align_up_by_mask(b, align_mask);
+            if (aligned_base + required_chunk_size <= end) {
+              deregister_gap(b, size);
+              if (b != aligned_base)
+                register_gap(b, aligned_base);
+              else
+                tag::clear_above_free(chunk::end_to_tag(b));
+
+              base = aligned_base;
+              chunk_end = end;
+              goto success;
+            }
+          }
+
+          return nullptr;
+        }
+      }
+    }
+
+  success:
     assert(chunk::align_down(base) == base);
 
     Byte* end = base + required_chunk_size;
@@ -569,7 +600,7 @@ class Talc {
     return base;
   }
 
-  void deallocate(Byte* ptr, size_t required_size, size_t required_align) {
+  void deallocate(Byte* ptr, size_t required_size) {
     Byte* chunk_base = ptr;
     Byte* chunk_end = chunk::alloc_to_end(chunk_base, required_size);
     Byte tag = chunk::read_word<Byte>(chunk::end_to_tag(chunk_end));
@@ -676,13 +707,13 @@ class Talc {
     }
   }
 
-  Byte* reallocate(Byte* ptr, size_t old_size, size_t old_align,
-                   size_t new_size, size_t new_align) {
+  Byte* reallocate(Byte* ptr, size_t old_size, size_t new_size,
+                   size_t new_align) {
     if (try_reallocate_in_place(ptr, old_size, new_size)) return ptr;
     Byte* new_ptr = allocate(new_size, new_align);
     if (new_ptr == nullptr) return nullptr;
     std::copy(ptr, ptr + old_size, new_ptr);
-    deallocate(ptr, old_size, old_align);
+    deallocate(ptr, old_size);
     return new_ptr;
   }
 
@@ -760,7 +791,7 @@ class Talc {
 
     Byte* base_ptr = user_ptr - shift;
 
-    deallocate(base_ptr, actual_chunk_size - 1, shift);
+    deallocate(base_ptr, actual_chunk_size - 1);
   }
 
   void* realloc(void* ptr, size_t new_size) {
