@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <cstdint>
+#include <limits>
 
 #include "flat_tlsf/flat_tlsf.h"
 #include "gtest/gtest.h"
@@ -9,6 +10,59 @@ namespace {
 
 void expect_eq(BitField lhs, BitField rhs) {
   EXPECT_EQ(lhs.storage, rhs.storage);
+}
+
+TEST(BitUtilsTest, PointerAlignment) {
+  alignas(64) Byte bytes[128] = {};
+  Byte *ptr = bytes + 37;
+
+  EXPECT_TRUE(bit_utils::is_aligned_to(bytes, 64));
+  EXPECT_FALSE(bit_utils::is_aligned_to(ptr, 32));
+  EXPECT_EQ(bit_utils::align_down_by(ptr, 32), bytes + 32);
+  EXPECT_EQ(bit_utils::align_up_by(ptr, 32), bytes + 64);
+  EXPECT_EQ(bit_utils::align_up_by_mask(ptr, 31), bytes + 64);
+  EXPECT_EQ(bit_utils::align_up_by(bytes + 64, 32), bytes + 64);
+}
+
+TEST(BitUtilsTest, SaturatingPtrAdd) {
+  Byte *ptr = reinterpret_cast<Byte *>(uintptr_t{100});
+  EXPECT_EQ(bit_utils::saturating_ptr_add(ptr, 23),
+            reinterpret_cast<Byte *>(uintptr_t{123}));
+
+  Byte *near_end = reinterpret_cast<Byte *>(
+      std::numeric_limits<uintptr_t>::max() - uintptr_t{3});
+  EXPECT_EQ(bit_utils::saturating_ptr_add(near_end, 4),
+            reinterpret_cast<Byte *>(std::numeric_limits<uintptr_t>::max()));
+}
+
+TEST(ChunkTest, GapPointerConversions) {
+  alignas(CHUNK_UNIT) Byte bytes[CHUNK_UNIT * 2] = {};
+  Byte *base = bytes;
+  Byte *end = bytes + CHUNK_UNIT;
+
+  EXPECT_EQ(reinterpret_cast<Byte *>(chunk::gap_base_to_node(base)),
+            base + GAP_NODE_OFFSET);
+  EXPECT_EQ(reinterpret_cast<Byte *>(chunk::gap_base_to_bin(base)),
+            base + GAP_BIN_OFFSET);
+  EXPECT_EQ(reinterpret_cast<Byte *>(chunk::gap_base_to_size(base)),
+            base + GAP_LOW_SIZE_OFFSET);
+  EXPECT_EQ(reinterpret_cast<Byte *>(chunk::gap_end_to_size_and_flag(end)),
+            end - GAP_HIGH_SIZE_OFFSET);
+
+  Node *node = chunk::gap_base_to_node(base);
+  EXPECT_EQ(chunk::gap_node_to_base(node), base);
+  EXPECT_EQ(reinterpret_cast<Byte *>(chunk::gap_node_to_size(node)),
+            base + GAP_LOW_SIZE_OFFSET);
+  EXPECT_EQ(chunk::end_to_tag(end), end - sizeof(Byte));
+}
+
+TEST(ChunkTest, AlignsByChunkUnit) {
+  alignas(CHUNK_UNIT) Byte bytes[CHUNK_UNIT * 3] = {};
+  Byte *ptr = bytes + CHUNK_UNIT + 1;
+
+  EXPECT_EQ(chunk::align_down(ptr), bytes + CHUNK_UNIT);
+  EXPECT_EQ(chunk::align_up(ptr), bytes + CHUNK_UNIT * 2);
+  EXPECT_EQ(chunk::align_up(bytes + CHUNK_UNIT), bytes + CHUNK_UNIT);
 }
 
 TEST(BitFieldTest, TestBitScanAfter) {

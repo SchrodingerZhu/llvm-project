@@ -9,6 +9,13 @@
 
 namespace flat_tlsf {
 
+using Byte = unsigned char;
+constexpr size_t CHUNK_UNIT = 4 * sizeof(size_t);
+constexpr size_t GAP_NODE_OFFSET = 0;
+constexpr size_t GAP_BIN_OFFSET = sizeof(size_t) * 2;
+constexpr size_t GAP_LOW_SIZE_OFFSET = sizeof(size_t) * 3;
+constexpr size_t GAP_HIGH_SIZE_OFFSET = sizeof(size_t);
+
 namespace bit_utils {
 
 constexpr size_t ilog2(size_t n) {
@@ -33,9 +40,33 @@ constexpr bool read_bit(size_t w, uint32_t index) {
   return w & (size_t{1} << index);
 }
 
-} // namespace bit_utils
+inline bool is_aligned_to(Byte *ptr, size_t align) {
+  return (std::bit_cast<uintptr_t>(ptr) & (align - 1)) == 0;
+}
 
-constexpr size_t CHUNK_UNIT = 4 * sizeof(size_t);
+inline Byte *align_down_by(Byte *ptr, size_t align) {
+  uintptr_t addr = std::bit_cast<uintptr_t>(ptr);
+  return std::bit_cast<Byte *>(addr & ~(align - 1));
+}
+
+inline Byte *align_up_by_mask(Byte *ptr, size_t align_mask) {
+  uintptr_t addr = std::bit_cast<uintptr_t>(ptr);
+  return std::bit_cast<Byte *>((addr + align_mask) & ~align_mask);
+}
+
+inline Byte *align_up_by(Byte *ptr, size_t align) {
+  return align_up_by_mask(ptr, align - 1);
+}
+
+inline Byte *saturating_ptr_add(Byte *ptr, size_t bytes) {
+  uintptr_t addr = std::bit_cast<uintptr_t>(ptr);
+  uintptr_t result;
+  if (__builtin_add_overflow(addr, bytes, &result))
+    return std::bit_cast<Byte *>(std::numeric_limits<uintptr_t>::max());
+  return std::bit_cast<Byte *>(result);
+}
+
+} // namespace bit_utils
 
 struct BitField {
   static constexpr size_t BITS_PER_ELEMENT = 8 * sizeof(size_t);
@@ -215,6 +246,80 @@ struct Binning {
     return size_to_bin(size - 1) + 1;
   }
 };
+
+namespace tag {
+static constexpr Byte ALLOCATED_FLAG = 0b0001;
+static constexpr Byte ABOVE_FREE_FLAG = 0b0010;
+static constexpr Byte HEAP_BASE_FLAG = 0b0100;
+static constexpr Byte HEAP_END_FLAG = 0b1000;
+
+inline bool is_above_free(Byte tag) { return tag & ABOVE_FREE_FLAG; }
+
+inline bool is_allocated(Byte tag) { return tag & ALLOCATED_FLAG; }
+
+inline bool is_heap_base(Byte tag) { return tag & HEAP_BASE_FLAG; }
+
+inline bool is_heap_end(Byte tag) { return tag & HEAP_END_FLAG; }
+
+inline void set_above_free(Byte *ptr) { *ptr |= ABOVE_FREE_FLAG; }
+
+inline void clear_above_free(Byte *ptr) { *ptr ^= ABOVE_FREE_FLAG; }
+
+inline void set_end_flag(Byte *ptr) { *ptr ^= HEAP_END_FLAG; }
+
+inline void clear_end_flag(Byte *ptr) { *ptr ^= HEAP_END_FLAG; }
+}; // namespace tag
+
+struct Node {};
+
+namespace chunk {
+inline bool is_chunk_size(Byte *base, Byte *end) {
+  return end - base >= CHUNK_UNIT;
+}
+inline size_t required_chunk_size(size_t size) {
+  size_t size_with_tag = size + 1;
+  size_t align_offset = (-size_with_tag) & (CHUNK_UNIT - 1);
+  return size_with_tag + align_offset;
+}
+inline Byte *alloc_to_end(Byte *base, size_t size) {
+  return base + required_chunk_size(size);
+}
+
+inline Node *gap_base_to_node(Byte *base) {
+  return reinterpret_cast<Node *>(base + GAP_NODE_OFFSET);
+}
+
+inline uint32_t *gap_base_to_bin(Byte *base) {
+  return reinterpret_cast<uint32_t *>(base + GAP_BIN_OFFSET);
+}
+
+inline size_t *gap_base_to_size(Byte *base) {
+  return reinterpret_cast<size_t *>(base + GAP_LOW_SIZE_OFFSET);
+}
+
+inline size_t *gap_end_to_size_and_flag(Byte *end) {
+  return reinterpret_cast<size_t *>(end - GAP_HIGH_SIZE_OFFSET);
+}
+
+inline Byte *gap_node_to_base(Node *node) {
+  return reinterpret_cast<Byte *>(node) - GAP_NODE_OFFSET;
+}
+
+inline size_t *gap_node_to_size(Node *node) {
+  return reinterpret_cast<size_t *>(reinterpret_cast<Byte *>(node) -
+                                    GAP_NODE_OFFSET + GAP_LOW_SIZE_OFFSET);
+}
+
+inline Byte *end_to_tag(Byte *end) { return end - sizeof(Byte); }
+
+inline Byte *align_up(Byte *ptr) {
+  return bit_utils::align_up_by(ptr, CHUNK_UNIT);
+}
+
+inline Byte *align_down(Byte *ptr) {
+  return bit_utils::align_down_by(ptr, CHUNK_UNIT);
+}
+} // namespace chunk
 
 } // namespace flat_tlsf
 
