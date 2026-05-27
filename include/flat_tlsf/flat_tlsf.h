@@ -2,42 +2,87 @@
 #define FLAT_TLSF_FLAT_TLSF_H_
 
 #include <array>
+#include <bit>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 
 namespace flat_tlsf {
 
 namespace bit_utils {
 
 constexpr size_t ilog2(size_t n) {
-  if constexpr (sizeof(size_t) == 8) {
-    return 63 - __builtin_clzll(static_cast<unsigned long long>(n));
-  } else {
-    return 31 - __builtin_clz(static_cast<unsigned int>(n));
-  }
+  return std::numeric_limits<size_t>::digits - 1 -
+         static_cast<size_t>(std::countl_zero(n));
 }
 
 constexpr bool is_power_of_2(size_t n) { return n > 0 && (n & (n - 1)) == 0; }
 
 constexpr uint32_t bit_scan_after(size_t w, uint32_t start_index) {
-  constexpr uint32_t BITS_PER_ELEMENT = 8 * sizeof(size_t);
-  if (start_index >= BITS_PER_ELEMENT) return BITS_PER_ELEMENT;
-  size_t mask = ~((static_cast<size_t>(1) << start_index) - 1);
-  size_t masked_w = w & mask;
-  if (masked_w == 0) return BITS_PER_ELEMENT;
-  if constexpr (sizeof(size_t) == 8)
-    return static_cast<uint32_t>(__builtin_ctzll(masked_w));
-  else
-    return static_cast<uint32_t>(__builtin_ctz(masked_w));
+  size_t lower_bits_cleared = (w >> start_index) << start_index;
+  return std::countr_zero(lower_bits_cleared);
 }
 
-}  // namespace bit_utils
+constexpr void set_bit(size_t &w, uint32_t index) { w |= size_t{1} << index; }
+
+constexpr void clear_bit(size_t &w, uint32_t index) {
+  w &= ~(size_t{1} << index);
+}
+
+constexpr bool read_bit(size_t w, uint32_t index) {
+  return w & (size_t{1} << index);
+}
+
+} // namespace bit_utils
 
 constexpr size_t CHUNK_UNIT = 4 * sizeof(size_t);
 
+struct BitField {
+  static constexpr size_t BITS_PER_ELEMENT = 8 * sizeof(size_t);
+  static constexpr size_t NUMBER_OF_ELEMENTS = 3;
+  static constexpr size_t BITS = BITS_PER_ELEMENT * NUMBER_OF_ELEMENTS;
+
+  std::array<size_t, NUMBER_OF_ELEMENTS> storage;
+
+  static constexpr BitField zeros() { return {}; }
+
+  constexpr uint32_t bit_scan_after(uint32_t bit) const {
+    uint32_t array_index = bit / BITS_PER_ELEMENT;
+    uint32_t element_index = bit % BITS_PER_ELEMENT;
+    uint32_t bit_index =
+        bit_utils::bit_scan_after(storage[array_index], element_index);
+    if (bit_index < BITS_PER_ELEMENT)
+      return array_index * BITS_PER_ELEMENT + bit_index;
+    for (array_index = array_index + 1; array_index < NUMBER_OF_ELEMENTS;
+         ++array_index) {
+      bit_index = bit_utils::bit_scan_after(storage[array_index], 0);
+      if (bit_index < BITS_PER_ELEMENT)
+        return array_index * BITS_PER_ELEMENT + bit_index;
+    }
+    return BITS;
+  }
+
+  constexpr void set_bit(uint32_t b) {
+    size_t array_index = b / BITS_PER_ELEMENT;
+    size_t element_index = b % BITS_PER_ELEMENT;
+    bit_utils::set_bit(storage[array_index], element_index);
+  }
+
+  constexpr void clear_bit(uint32_t b) {
+    size_t array_index = b / BITS_PER_ELEMENT;
+    size_t element_index = b % BITS_PER_ELEMENT;
+    bit_utils::clear_bit(storage[array_index], element_index);
+  }
+
+  constexpr bool read_bit(uint32_t b) const {
+    size_t array_index = b / BITS_PER_ELEMENT;
+    size_t element_index = b % BITS_PER_ELEMENT;
+    return bit_utils::read_bit(storage[array_index], element_index);
+  }
+};
+
 struct Binning {
-  using BitFieldStorage = std::array<size_t, 3>;
-  static constexpr size_t BIT_COUNT = 8 * sizeof(BitFieldStorage) - 1;
+  static constexpr size_t BIT_COUNT = BitField::BITS - 1;
 
   /// A fast binning algorithm with relatively even coverage and configurable
   /// behavior.
@@ -100,7 +145,8 @@ struct Binning {
     // might give us a `size` smaller than `super::CHUNK_UNIT`
     // and doesn't waste extra bins due to exponential subdivisions
     // being smaller than `super::CHUNK_UNIT` here.
-    if (size <= exponential_region) return size >> bit_utils::ilog2(CHUNK_UNIT);
+    if (size <= exponential_region)
+      return size >> bit_utils::ilog2(CHUNK_UNIT);
 
     // Let's say `exponential_region` is 256, the chunk unit is 32, LIN_DIVS is
     // 4
@@ -170,54 +216,6 @@ struct Binning {
   }
 };
 
-struct BitField {
-  Binning::BitFieldStorage storage;
-  static constexpr size_t BITS_PER_ELEMENT = 8 * sizeof(size_t);
-  static constexpr size_t BITS = 8 * sizeof(storage);
+} // namespace flat_tlsf
 
-  static constexpr BitField zeros() { return {}; }
-
-  constexpr uint32_t bit_scan_after(uint32_t bit) const {
-    uint32_t array_index = bit / BITS_PER_ELEMENT;
-    if (array_index >= storage.size()) return 0;
-
-    uint32_t sub_bit = bit & (BITS_PER_ELEMENT - 1);
-    uint32_t bit_index =
-        bit_utils::bit_scan_after(storage[array_index], sub_bit);
-
-    if (bit_index < BITS_PER_ELEMENT)
-      return array_index * BITS_PER_ELEMENT + bit_index;
-
-    for (uint32_t i = array_index + 1; i < storage.size(); ++i) {
-      uint32_t idx = bit_utils::bit_scan_after(storage[i], 0);
-      if (idx < BITS_PER_ELEMENT) return i * BITS_PER_ELEMENT + idx;
-    }
-
-    return BITS;
-  }
-
-  constexpr void set_bit(uint32_t b) {
-    size_t array_index = b / BITS_PER_ELEMENT;
-    size_t bit_index = b & (BITS_PER_ELEMENT - 1);
-    size_t mask = static_cast<size_t>(1) << bit_index;
-    storage[array_index] |= mask;
-  }
-
-  constexpr void clear_bit(uint32_t b) {
-    size_t array_index = b / BITS_PER_ELEMENT;
-    size_t bit_index = b & (BITS_PER_ELEMENT - 1);
-    size_t mask = static_cast<size_t>(1) << bit_index;
-    storage[array_index] &= ~mask;
-  }
-
-  constexpr bool read_bit(uint32_t b) const {
-    size_t array_index = b / BITS_PER_ELEMENT;
-    size_t bit_index = b & (BITS_PER_ELEMENT - 1);
-    size_t mask = static_cast<size_t>(1) << bit_index;
-    return (storage[array_index] & mask) != 0;
-  }
-};
-
-}  // namespace flat_tlsf
-
-#endif  // FLAT_TLSF_FLAT_TLSF_H_
+#endif // FLAT_TLSF_FLAT_TLSF_H_

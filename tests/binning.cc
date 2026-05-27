@@ -10,11 +10,8 @@ namespace flat_tlsf {
 namespace {
 
 template <typename F>
-size_t find_binning_boundary(
-    uint32_t next_bin,
-    size_t base,
-    size_t end,
-    F&& size_to_bin) {
+size_t find_binning_boundary(uint32_t next_bin, size_t base, size_t end,
+                             F &&size_to_bin) {
   while (base < end) {
     size_t mid = base + (end - base) / 2;
     if (size_to_bin(mid) >= next_bin)
@@ -26,11 +23,9 @@ size_t find_binning_boundary(
 }
 
 template <typename F1, typename F2>
-void find_binning_boundaries(
-    size_t start_from_size,
-    std::optional<uint32_t> stop_at_bin,
-    F1&& size_to_bin,
-    F2&& bin_boundary_callback) {
+void find_binning_boundaries(size_t start_from_size,
+                             std::optional<uint32_t> stop_at_bin,
+                             F1 &&size_to_bin, F2 &&bin_boundary_callback) {
   size_t prev_size = start_from_size;
   size_t size = start_from_size;
   size_t increment = 1;
@@ -42,11 +37,8 @@ void find_binning_boundaries(
 
     if (!prev_bin.has_value() || prev_bin.value() != bin) {
       if (prev_bin.has_value())
-        size = find_binning_boundary(
-            prev_bin.value() + 1,
-            prev_size,
-            size,
-            size_to_bin);
+        size = find_binning_boundary(prev_bin.value() + 1, prev_size, size,
+                                     size_to_bin);
 
       bin_boundary_callback(bin, size);
 
@@ -65,14 +57,14 @@ void find_binning_boundaries(
       break;
     }
 
-    if (stop_at_bin.has_value() && stop_at_bin.value() == bin) break;
+    if (stop_at_bin.has_value() && stop_at_bin.value() == bin)
+      break;
   }
 }
 
 template <typename F>
-void check_binning_properties(
-    std::optional<uint32_t> stop_at_bin,
-    F&& size_to_bin) {
+void check_binning_properties(std::optional<uint32_t> stop_at_bin,
+                              F &&size_to_bin) {
   std::optional<uint32_t> prev_bin;
 
   auto callback = [&](uint32_t bin, size_t size) {
@@ -81,16 +73,11 @@ void check_binning_properties(
     prev_bin = bin;
 
     EXPECT_TRUE(
-        !stop_at_bin.has_value() ||
-        bin <= stop_at_bin.value() ||
+        !stop_at_bin.has_value() || bin <= stop_at_bin.value() ||
         (bin == std::numeric_limits<uint32_t>::max() && size < CHUNK_UNIT));
   };
 
-  find_binning_boundaries(
-      CHUNK_UNIT - 1,
-      stop_at_bin,
-      size_to_bin,
-      callback);
+  find_binning_boundaries(CHUNK_UNIT - 1, stop_at_bin, size_to_bin, callback);
 }
 
 TEST(FlatTlsfTest, CheckFindBinningBoundary) {
@@ -129,25 +116,12 @@ TEST(FlatTlsfTest, CheckFindBinningBoundaries) {
 
 TEST(FlatTlsfTest, TestLinearExtentThenLinearlyDividedExponentialBinning) {
   auto size_to_bin_fn = [](size_t size) {
-    return Binning::linear_extend_then_linearly_divided_expotential_binning<8, 4>(size);
+    return Binning::linear_extend_then_linearly_divided_expotential_binning<8,
+                                                                            4>(
+        size);
   };
   check_binning_properties(std::nullopt, size_to_bin_fn);
 }
 
-TEST(BitFieldTest, TestBitScanAfter) {
-  BitField field = BitField::zeros();
-  field.storage[0] = 0b10100;
-  field.storage[1] = 0b00010;
-
-  EXPECT_EQ(field.bit_scan_after(0), 2);
-  EXPECT_EQ(field.bit_scan_after(2), 2);
-  EXPECT_EQ(field.bit_scan_after(3), 4);
-  EXPECT_EQ(field.bit_scan_after(4), 4);
-  EXPECT_EQ(field.bit_scan_after(5), 65);
-  EXPECT_EQ(field.bit_scan_after(65), 65);
-  EXPECT_EQ(field.bit_scan_after(66), BitField::BITS);
-}
-
-
-}  // namespace
-}  // namespace flat_tlsf
+} // namespace
+} // namespace flat_tlsf

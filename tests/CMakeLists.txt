@@ -1,5 +1,6 @@
 add_executable(flat_tlsf_test
-  flat_tlsf_test.cc
+  binning.cc
+  bitfield.cc
 )
 
 target_link_libraries(flat_tlsf_test
