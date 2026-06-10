@@ -64,6 +64,7 @@ if(NOT LIBC_TARGET_OS_IS_GPU)
       libc.src.__support.CPP.optional
       libc.src.__support.block
       libc.src.__support.freelist
+      libc.src.__support.freetrie
       libc.src.__support.tlsf_freestore
   )
 

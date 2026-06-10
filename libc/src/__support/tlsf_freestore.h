@@ -35,6 +35,7 @@ using TLSFFreeStore = ConfigurableFreeStoreImpl<
         STEP_SIZE_BITS,
         NUM_STEP_BITS,
         NUM_TABLE_ENTRIES,
+        IndexType::LinearList,
         SearchPreference::OverSized,
         IndexType::LinearList,
         SearchPreference::OverSized

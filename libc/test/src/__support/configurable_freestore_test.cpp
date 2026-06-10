@@ -31,7 +31,7 @@ constexpr size_t NUM_TABLE_ENTRIES = 192 / BITS_PER_ENTRY;
 using BestFitTLSFStore = ConfigurableFreeStoreImpl<
     FreeStoreConfig<
         32, 3, 2, NUM_TABLE_ENTRIES,
-        SearchPreference::BestFit,
+        IndexType::LinearList, SearchPreference::BestFit,
         IndexType::LinearList, SearchPreference::BestFit
     >
 >;
@@ -40,7 +40,7 @@ using BestFitTLSFStore = ConfigurableFreeStoreImpl<
 using OverSizedTLSFStore = ConfigurableFreeStoreImpl<
     FreeStoreConfig<
         32, 3, 2, NUM_TABLE_ENTRIES,
-        SearchPreference::OverSized,
+        IndexType::LinearList, SearchPreference::OverSized,
         IndexType::LinearList, SearchPreference::OverSized
     >
 >;
@@ -49,7 +49,16 @@ using OverSizedTLSFStore = ConfigurableFreeStoreImpl<
 using LargeTrieStore = ConfigurableFreeStoreImpl<
     FreeStoreConfig<
         32, 3, 2, NUM_TABLE_ENTRIES,
-        SearchPreference::BestFit,
+        IndexType::LinearList, SearchPreference::BestFit,
+        IndexType::Trie, SearchPreference::BestFit
+    >
+>;
+
+// 4. Small Trie store config
+using SmallTrieStore = ConfigurableFreeStoreImpl<
+    FreeStoreConfig<
+        32, 3, 2, NUM_TABLE_ENTRIES,
+        IndexType::Trie, SearchPreference::BestFit,
         IndexType::Trie, SearchPreference::BestFit
     >
 >;
@@ -157,4 +166,65 @@ TEST(LlvmLibcConfigurableFreeStoreTest, LargeTrieConfiguration) {
   EXPECT_EQ(store.find_and_remove_fit(1100), block3);
   // Large trie another fit
   EXPECT_EQ(store.find_and_remove_fit(1800), block4);
+}
+
+TEST(LlvmLibcConfigurableFreeStoreTest, SmallTrieConfiguration) {
+  SmallTrieStore store;
+
+  alignas(Block::MIN_ALIGN) byte buf[4096];
+  auto result = Block::init(buf);
+  ASSERT_TRUE(result.has_value());
+  Block *block = *result;
+  block->mark_free();
+
+  // We want to test Bin 1 (size [32, 64)) and Bin 2 (size [64, 96)).
+  // Required size for Trie (64-bit) is 48.
+  // Bin 1 min is 32 < 48 -> List.
+  // Bin 2 min is 64 >= 48 -> Trie.
+
+  // Allocate blocks for Bin 1: Block A (40 B payload), Block B (48 B payload)
+  auto split_a = block->split(40);
+  ASSERT_TRUE(split_a.has_value());
+  Block *block_a = block;
+  block_a->mark_free();
+
+  Block *rem1 = *split_a;
+  auto split_b = rem1->split(48);
+  ASSERT_TRUE(split_b.has_value());
+  Block *block_b = rem1;
+  block_b->mark_free();
+
+  // Allocate blocks for Bin 2: Block C (80 B payload), Block D (72 B payload)
+  Block *rem2 = *split_b;
+  auto split_c = rem2->split(80);
+  ASSERT_TRUE(split_c.has_value());
+  Block *block_c = rem2;
+  block_c->mark_free();
+
+  Block *rem3 = *split_c;
+  auto split_d = rem3->split(72);
+  ASSERT_TRUE(split_d.has_value());
+  Block *block_d = rem3;
+  block_d->mark_free();
+
+  Block *block_rem = *split_d;
+  block_rem->mark_free();
+
+  // Test Bin 1 (List - First Fit):
+  // Insert B then A.
+  store.insert(block_b);
+  store.insert(block_a);
+
+  // Request 35. B (48) and A (40) both fit.
+  EXPECT_EQ(store.find_and_remove_fit(35), block_b);
+  EXPECT_EQ(store.find_and_remove_fit(35), block_a);
+
+  // Test Bin 2 (Trie - Best Fit):
+  // Insert C (80) then D (72).
+  store.insert(block_c);
+  store.insert(block_d);
+
+  // Request 70. C (80) and D (72) both fit.
+  EXPECT_EQ(store.find_and_remove_fit(70), block_d);
+  EXPECT_EQ(store.find_and_remove_fit(70), block_c);
 }
