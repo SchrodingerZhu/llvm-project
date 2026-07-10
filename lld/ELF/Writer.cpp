@@ -59,6 +59,7 @@ private:
   void addSectionSymbols();
   void sortSections();
   void resolveShfLinkOrder();
+  void fixupAsanShadowSections();
   void finalizeAddressDependentContent();
   void optimizeBasicBlockJumps();
   void sortInputSections();
@@ -1450,6 +1451,57 @@ template <class ELFT> void Writer<ELFT>::resolveShfLinkOrder() {
   }
 }
 
+template <class ELFT> void Writer<ELFT>::fixupAsanShadowSections() {
+  if (ctx.arg.asanShadowMode == AsanShadowMode::None)
+    return;
+
+  llvm::TimeTraceScope timeScope("Fixup ASan Shadow Sections");
+  for (OutputSection *sec : ctx.outputSections) {
+    if (!(sec->flags & SHF_LINK_ORDER) ||
+        (!sec->name.starts_with(".shadow") && !sec->name.starts_with("__shadow")))
+      continue;
+
+    uint64_t currentOff = 0;
+    for (SectionCommand *cmd : sec->commands) {
+      auto *isd = dyn_cast<InputSectionDescription>(cmd);
+      if (!isd)
+        continue;
+
+      SmallVector<InputSection *, 0> newSections;
+      bool modified = false;
+
+      for (InputSection *isec : isd->sections) {
+        if ((isec->flags & SHF_LINK_ORDER) && isec->getLinkOrderDep()) {
+          uint64_t targetVA = isec->getLinkOrderDep()->getVA(0);
+          uint64_t reqShadowVA = ctx.arg.getAsanShadowAddress(targetVA);
+          uint64_t curShadowVA = sec->addr + currentOff;
+
+          if (reqShadowVA > curShadowVA) {
+            uint64_t delta = reqShadowVA - curShadowVA;
+            char *buf = ctx.bAlloc.Allocate<char>(delta);
+            memset(buf, 0, delta);
+            auto *spacer = make<InputSection>(
+                ctx.internalFile, ".shadow_spacer", SHT_PROGBITS, sec->flags,
+                /*addralign=*/1, /*entsize=*/0,
+                ArrayRef<uint8_t>((uint8_t *)buf, delta));
+            spacer->parent = sec;
+            spacer->outSecOff = currentOff;
+            newSections.push_back(spacer);
+            currentOff += delta;
+            modified = true;
+          }
+        }
+        isec->outSecOff = currentOff;
+        newSections.push_back(isec);
+        currentOff += isec->getSize();
+      }
+
+      if (modified)
+        isd->sections = std::move(newSections);
+    }
+  }
+}
+
 static void finalizeSynthetic(Ctx &ctx, SyntheticSection *sec) {
   if (sec && sec->isNeeded() && sec->getParent()) {
     llvm::TimeTraceScope timeScope("Finalize synthetic sections", sec->name);
@@ -1508,6 +1560,7 @@ template <class ELFT> void Writer<ELFT>::finalizeAddressDependentContent() {
   const auto finalizeOrderDependentContent = [this] {
     finalizeSynthetic(ctx, ctx.in.armExidx.get());
     resolveShfLinkOrder();
+    fixupAsanShadowSections();
   };
   finalizeOrderDependentContent();
 
