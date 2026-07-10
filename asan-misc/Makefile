@@ -2,7 +2,7 @@
 CC = ../build/bin/clang
 CXX = ../build/bin/clang
 LD = ../build/bin/ld.lld
-CFLAGS = --target=arm-none-eabi -mcpu=cortex-m3 -mthumb -O1 -g -ffreestanding -Wno-array-bounds
+CFLAGS = --target=arm-none-eabi -mcpu=cortex-m3 -mthumb -O1 -g -ffreestanding -Wno-array-bounds -fno-omit-frame-pointer -mno-omit-leaf-frame-pointer
 LDFLAGS = -T baremetal.ld --fatal-warnings --asan-shadow-mode=split --asan-shadow-offset=32768 --wrap=malloc --wrap=free
 
 # Once clang is rebuilt with new options, you can add:
@@ -36,8 +36,9 @@ $(TARGET): $(OBJS)
 
 run: $(TARGET)
 	@echo "Running in QEMU (Ctrl+A then X to exit if stuck)..."
-	qemu-system-arm -M lm3s6965evb -nographic -kernel $(TARGET) & \
+	qemu-system-arm -M lm3s6965evb -nographic -kernel $(TARGET) > qemu_run.log 2>&1 & \
 	QEMU_PID=$$!; sleep 1; kill $$QEMU_PID 2>/dev/null || true
+	@cat qemu_run.log | python3 asan_symbolize.py --elf $(TARGET)
 
 run-all:
 	@for i in 0 1 2 3 4 5 6 7 8; do \
@@ -48,7 +49,7 @@ run-all:
 		$(MAKE) -s $(TARGET) TEST=$$i; \
 		qemu-system-arm -M lm3s6965evb -nographic -kernel $(TARGET) > qemu_test_$$i.log 2>&1 & \
 		QEMU_PID=$$!; sleep 1; kill $$QEMU_PID 2>/dev/null || true; \
-		cat qemu_test_$$i.log; \
+		cat qemu_test_$$i.log | python3 asan_symbolize.py --elf $(TARGET); \
 	done
 
 clean:
