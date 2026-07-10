@@ -484,6 +484,16 @@ static cl::opt<bool> ClSplitShadow(
     cl::desc("Split shadow memory for systems without MMU"),
     cl::init(false));
 
+static cl::opt<uint64_t> ClSplitShadowSliceMask(
+    "asan-split-shadow-slice-mask",
+    cl::desc("Bitmask for extracting the region slice when -asan-split-shadow is enabled (default 0xf0000000)"),
+    cl::Hidden, cl::init(0xf0000000ULL));
+
+static cl::opt<uint64_t> ClSplitShadowOffsetMask(
+    "asan-split-shadow-offset-mask",
+    cl::desc("Bitmask for extracting the within-slice offset when -asan-split-shadow is enabled (defaults to ~slice-mask if 0)"),
+    cl::Hidden, cl::init(0));
+
 static cl::opt<bool> ClGlobalsMetadataSection(
     "asan-globals-metadata-section",
     cl::desc("Emit global variable descriptions in a named section for baremetal/linker-script targets"),
@@ -523,6 +533,9 @@ struct ShadowMapping {
   uint64_t Offset;
   std::optional<uint64_t> Min;
   std::optional<uint64_t> Max;
+  bool Split;
+  uint64_t SplitSliceMask;
+  uint64_t SplitOffsetMask;
   bool OrShadowOffset;
   bool InGlobal;
 };
@@ -657,6 +670,13 @@ static ShadowMapping getShadowMapping(const Triple &TargetTriple, int LongSize,
   if (ClMappingMax.getNumOccurrences() > 0) {
     Mapping.Max = ClMappingMax;
   }
+
+  Mapping.Split = ClSplitShadow;
+  Mapping.SplitSliceMask = ClSplitShadowSliceMask;
+  if (ClSplitShadowOffsetMask.getNumOccurrences() > 0)
+    Mapping.SplitOffsetMask = ClSplitShadowOffsetMask;
+  else
+    Mapping.SplitOffsetMask = ~Mapping.SplitSliceMask;
 
   // OR-ing shadow offset if more efficient (at least on x86) if the offset
   // is a power of two, but on ppc64 and loongarch64 we have to use add since
@@ -1480,19 +1500,30 @@ static bool isSupportedAddrspace(const Triple &TargetTriple, Value *Addr) {
 }
 
 Value *AddressSanitizer::memToShadow(Value *Shadow, IRBuilder<> &IRB) {
-  // Shadow >> scale
-  Shadow = IRB.CreateLShr(Shadow, Mapping.Scale);
-  if (Mapping.Offset == 0) return Shadow;
-  // (Shadow >> scale) | offset
   Value *ShadowBase;
   if (LocalDynamicShadow)
     ShadowBase = LocalDynamicShadow;
   else
     ShadowBase = ConstantInt::get(IntptrTy, Mapping.Offset);
-  if (Mapping.OrShadowOffset)
-    return IRB.CreateOr(Shadow, ShadowBase);
-  else
+
+  if (Mapping.Split) {
+    Value *TopBits =
+        IRB.CreateAnd(Shadow, ConstantInt::get(IntptrTy, Mapping.SplitSliceMask));
+    Value *BottomBits =
+        IRB.CreateAnd(Shadow, ConstantInt::get(IntptrTy, Mapping.SplitOffsetMask));
+    BottomBits = IRB.CreateLShr(BottomBits, Mapping.Scale);
+    Shadow = IRB.CreateOr(TopBits, BottomBits);
     return IRB.CreateAdd(Shadow, ShadowBase);
+  } else {
+    // Shadow >> scale
+    Shadow = IRB.CreateLShr(Shadow, Mapping.Scale);
+    if (Mapping.Offset == 0) return Shadow;
+    // (Shadow >> scale) | offset
+    if (Mapping.OrShadowOffset)
+      return IRB.CreateOr(Shadow, ShadowBase);
+    else
+      return IRB.CreateAdd(Shadow, ShadowBase);
+  }
 }
 
 // Instrument memset/memmove/memcpy
@@ -2025,7 +2056,6 @@ AddressSanitizer::instrumentBareMetalAddress(Instruction *InsertBefore,
                                              Value *Addr) {
   if (Mapping.Min) {
     // Insert a cmp+br to skip sanitising low addresses, such as ROM.
-    Type *PtrTy = cast<PointerType>(Addr->getType()->getScalarType());
     IRBuilder<> IRB(InsertBefore);
     Value *AddrInt = IRB.CreatePtrToInt(Addr, IntptrTy);
     Value *Cmp =
@@ -2036,7 +2066,6 @@ AddressSanitizer::instrumentBareMetalAddress(Instruction *InsertBefore,
 
   if (Mapping.Max) {
     // Insert a cmp+br to skip sanitising high addresses, such as device memory.
-    Type *PtrTy = cast<PointerType>(Addr->getType()->getScalarType());
     IRBuilder<> IRB(InsertBefore);
     Value *AddrInt = IRB.CreatePtrToInt(Addr, IntptrTy);
     Value *Cmp =
