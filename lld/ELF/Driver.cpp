@@ -1384,12 +1384,10 @@ static void readConfigs(Ctx &ctx, opt::InputArgList &args) {
       ErrAlways(ctx) << "unknown --asan-shadow-mode: " << s;
   }
   ctx.arg.asanShadowScale = args::getInteger(args, OPT_asan_shadow_scale, 3);
-  if (auto *arg = args.getLastArg(OPT_asan_shadow_offset))
-    ctx.arg.asanShadowOffset = args::getInteger(args, OPT_asan_shadow_offset, 0);
-  if (auto *arg = args.getLastArg(OPT_asan_split_shadow_slice_mask))
-    ctx.arg.asanSplitShadowSliceMask =
-        args::getInteger(args, OPT_asan_split_shadow_slice_mask, 0xf0000000ULL);
-  if (auto *arg = args.getLastArg(OPT_asan_split_shadow_offset_mask))
+  ctx.arg.asanShadowOffset = args::getInteger(args, OPT_asan_shadow_offset, 0);
+  ctx.arg.asanSplitShadowSliceMask =
+      args::getInteger(args, OPT_asan_split_shadow_slice_mask, 0xf0000000ULL);
+  if (args.hasArg(OPT_asan_split_shadow_offset_mask))
     ctx.arg.asanSplitShadowOffsetMask = args::getInteger(
         args, OPT_asan_split_shadow_offset_mask, ~ctx.arg.asanSplitShadowSliceMask);
   else
