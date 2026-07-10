@@ -124,11 +124,11 @@ namespace {
 
 #ifdef SPLIT_SHADOW
 unsigned char *get_shadow_addr(uintptr_t addr) {
-  return (unsigned char *)((addr & 0xf0000000) | ((addr & 0x0fffffff) >> 3));
+  return (unsigned char *)((addr & 0xf0000000) | (((addr & 0x0fffffff) >> 3) + SHADOW_OFFSET));
 }
 
 uintptr_t get_normal_addr(void* shadow_addr) {
-  return (((uintptr_t)shadow_addr & 0xf0000000) | (((uintptr_t)shadow_addr & 0x0fffffff) << 3));
+  return (((uintptr_t)shadow_addr & 0xf0000000) | ((((uintptr_t)shadow_addr & 0x0fffffff) - SHADOW_OFFSET) << 3));
 }
 #else
 unsigned char *get_shadow_addr(uintptr_t addr) {
