@@ -478,9 +478,19 @@ static cl::opt<int> ClDebugMin("asan-debug-min", cl::desc("Debug min inst"),
 static cl::opt<int> ClDebugMax("asan-debug-max", cl::desc("Debug max inst"),
                                cl::Hidden, cl::init(-1));
 
+static cl::opt<bool> ClSplitShadow(
+    "asan-split-shadow",
+    cl::desc("Split shadow memory for systems without MMU"),
+    cl::init(false));
+
 static cl::opt<bool> ClGlobalsMetadataSection(
     "asan-globals-metadata-section",
     cl::desc("Emit global variable descriptions in a named section for baremetal/linker-script targets"),
+    cl::init(false));
+
+static cl::opt<bool> ClIgnoreConstGlobals(
+    "asan-ignore-const-globals",
+    cl::desc("Do not emit redzones and metadata for constant globals"),
     cl::init(false));
 
 STATISTIC(NumInstrumentedReads, "Number of instrumented reads");
@@ -2218,6 +2228,7 @@ bool ModuleAddressSanitizer::shouldInstrumentGlobal(GlobalVariable *G) const {
   if (G->isThreadLocal()) return false;
   // For now, just ignore this Global if the alignment is large.
   if (G->getAlign() && *G->getAlign() > getMinRedzoneSizeForGlobal()) return false;
+  if (ClIgnoreConstGlobals && G->isConstant()) return false;
 
   // For non-COFF targets, only instrument globals known to be defined by this
   // TU.
