@@ -2673,7 +2673,15 @@ void ModuleAddressSanitizer::InstrumentGlobalsStatic(
             GlobalValue::dropLLVMManglingEscape(G->getName()));
     MDNode *MD = MDNode::get(M.getContext(), ValueAsMetadata::get(G));
     ShadowGV->setMetadata(LLVMContext::MD_associated, MD);
-    ShadowGV->setSection("__shadow");
+    // Note: Later optimizations might promote a non-constant to a constant (or
+    // vice versa), so this initial section assignment might become out of sync
+    // with the target global's final region. The linker (lld/ELF) should dynamically
+    // route and fix up these shadow sections based on the final Read-Only / Read-Write
+    // properties of their SHF_LINK_ORDER (MD_associated) target sections.
+    if (G->isConstant())
+      ShadowGV->setSection("__shadow_ro");
+    else
+      ShadowGV->setSection("__shadow_rw");
     GlobalShadows[i] = ShadowGV;
   }
   
@@ -2830,6 +2838,7 @@ void ModuleAddressSanitizer::instrumentGlobals(IRBuilder<> &IRB,
   SmallVector<GlobalVariable *, 16> NewGlobals(n);
   SmallVector<Constant *, 16> Initializers(n);
   SmallVector<Constant *, 16> Shadows(n);
+  bool HasDynamicallyInitializedGlobals = false;
 
   for (size_t i = 0; i < n; i++) {
     GlobalVariable *G = GlobalsToChange[i];
@@ -2986,7 +2995,7 @@ void ModuleAddressSanitizer::instrumentGlobals(IRBuilder<> &IRB,
   }
 
   // Create calls for poisoning before initializers run and unpoisoning after.
-  if (ClInitializers)
+  if (ClInitializers && HasDynamicallyInitializedGlobals)
     createInitializerPoisonCalls();
 
   LLVM_DEBUG(dbgs() << M);
