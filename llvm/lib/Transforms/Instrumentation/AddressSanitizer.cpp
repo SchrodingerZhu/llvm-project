@@ -493,6 +493,11 @@ static cl::opt<bool> ClIgnoreConstGlobals(
     cl::desc("Do not emit redzones and metadata for constant globals"),
     cl::init(false));
 
+static cl::opt<bool> ClSmallGlobalMetadata(
+    "asan-small-global-metadata",
+    cl::desc("Emit less metadata for global variables"),
+    cl::init(false));
+
 STATISTIC(NumInstrumentedReads, "Number of instrumented reads");
 STATISTIC(NumInstrumentedWrites, "Number of instrumented writes");
 STATISTIC(NumOptimizedAccessesToGlobalVar,
@@ -2738,9 +2743,12 @@ void ModuleAddressSanitizer::instrumentGlobals(IRBuilder<> &IRB,
   //   size_t padding_for_windows_msvc_incremental_link;
   //   size_t odr_indicator;
   // We initialize an array of such structures and pass it to a run-time call.
-  StructType *GlobalStructTy =
-      StructType::get(IntptrTy, IntptrTy, IntptrTy, IntptrTy, IntptrTy,
-                      IntptrTy, IntptrTy, IntptrTy);
+  StructType *GlobalStructTy;
+  if (ClSmallGlobalMetadata)
+    GlobalStructTy = StructType::get(IntptrTy, IntptrTy);
+  else
+    GlobalStructTy = StructType::get(IntptrTy, IntptrTy, IntptrTy, IntptrTy,
+                                     IntptrTy, IntptrTy, IntptrTy, IntptrTy);
   SmallVector<GlobalVariable *, 16> NewGlobals(n);
   SmallVector<Constant *, 16> Initializers(n);
 
@@ -2832,15 +2840,25 @@ void ModuleAddressSanitizer::instrumentGlobals(IRBuilder<> &IRB,
       ODRIndicator = ConstantExpr::getPtrToInt(ODRIndicatorSym, IntptrTy);
     }
 
-    Constant *Initializer = ConstantStruct::get(
-        GlobalStructTy,
-        ConstantExpr::getPointerCast(InstrumentedGlobal, IntptrTy),
-        ConstantInt::get(IntptrTy, SizeInBytes),
-        ConstantInt::get(IntptrTy, SizeInBytes + RightRedzoneSize),
-        ConstantExpr::getPointerCast(Name, IntptrTy),
-        ConstantExpr::getPointerCast(getOrCreateModuleName(), IntptrTy),
-        ConstantInt::get(IntptrTy, MD.IsDynInit),
-        Constant::getNullValue(IntptrTy), ODRIndicator);
+    Constant *Initializer;
+    if (ClSmallGlobalMetadata)
+      Initializer = ConstantStruct::get(
+          GlobalStructTy,
+          ConstantExpr::getPointerCast(InstrumentedGlobal, IntptrTy),
+          ConstantInt::get(IntptrTy, SizeInBytes));
+    else
+      Initializer = ConstantStruct::get(
+          GlobalStructTy,
+          ConstantExpr::getPointerCast(InstrumentedGlobal, IntptrTy),
+          ConstantInt::get(IntptrTy, SizeInBytes),
+          ConstantInt::get(IntptrTy, SizeInBytes + RightRedzoneSize),
+          ConstantExpr::getPointerCast(Name, IntptrTy),
+          ConstantExpr::getPointerCast(getOrCreateModuleName(), IntptrTy),
+          ConstantInt::get(IntptrTy, MD.IsDynInit),
+          Constant::getNullValue(IntptrTy), ODRIndicator);
+
+    if (ClInitializers && MD.IsDynInit)
+      HasDynamicallyInitializedGlobals = true;
 
     LLVM_DEBUG(dbgs() << "NEW GLOBAL: " << *NewGlobal << "\n");
 
