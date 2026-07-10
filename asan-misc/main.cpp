@@ -52,18 +52,27 @@ void trigger_stack_overflow() {
   baremetal_puts("[TEST] Stack overflow write completed (if not caught by ASan)\n");
 }
 
+extern "C" void run_demo(int argc, const char *argv[]);
+
 extern "C" int main(int argc, const char *argv[]) {
   baremetal_puts("[MAIN] Entered main() test harness.\n");
 
-  int test_id = 0; // Default: Global Overflow
+  int test_id = 0;
   if (argc > 1 && argv[1]) {
-    if (argv[1][0] == '1') test_id = 1;
+    test_id = 0;
+    const char *p = argv[1];
+    while (*p >= '0' && *p <= '9') {
+      test_id = test_id * 10 + (*p - '0');
+      p++;
+    }
   }
 
   if (test_id == 0) {
     trigger_global_overflow();
-  } else {
+  } else if (test_id == 1) {
     trigger_stack_overflow();
+  } else {
+    run_demo(argc, argv);
   }
 
   baremetal_puts("[MAIN] Exiting main() normally.\n");

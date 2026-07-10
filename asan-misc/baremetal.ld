@@ -15,9 +15,14 @@ SECTIONS {
   } > ROM
 
   .rodata : ALIGN(4) {
+    Image$$ER_RO_DATA$$Base = .;
     *(.rodata*)
     . = ALIGN(4);
+    Image$$ER_RO_DATA$$Limit = .;
   } > ROM
+
+  .ARM.extab : ALIGN(4) { *(.ARM.extab* .gnu.linkonce.armextab.*) } > ROM
+  .ARM.exidx : ALIGN(4) { *(.ARM.exidx* .gnu.linkonce.armexidx.*) } > ROM
 
   /* ASan Global Metadata Section */
   .asan_metadata : ALIGN(8) {
@@ -26,11 +31,10 @@ SECTIONS {
     __asan_global_metadata$$Limit = .;
   } > ROM
 
-  /* ASan Static ROM Shadow Section */
-  .shadow_ro : ALIGN(8) {
+  /* ASan Static ROM Shadow Section at 0x00008000 */
+  .shadow_ro 0x00008000 : ALIGN(8) {
     Image$$ER_SHADOW_ROM$$Base = .;
     *(__shadow_ro*)
-    Image$$ER_RO_DATA$$Base = .; /* Runtime symbol for ROM end */
     Image$$ER_SHADOW_ROM$$Limit = .;
   } > ROM
 
@@ -53,19 +57,23 @@ SECTIONS {
     Image$$ER_RW_ZI$$Limit = .;
   } > RAM
 
-  /* ASan Static RAM Shadow Section */
-  .shadow_rw : ALIGN(8) {
+  /* ASan Static RAM Shadow Section at 0x20008000 */
+  .shadow_rw 0x20008000 : ALIGN(8) {
+    __shadow_rw_start = .;
     Image$$ER_SHADOW_1$$Base = .;
     *(__shadow_rw*)
     Image$$ER_SHADOW_4$$Limit = .;
-  } > RAM
+    __shadow_rw_end = .;
+  } > RAM AT > ROM
+
+  __shadow_rw_load = LOADADDR(.shadow_rw);
 
   /* Stack and Heap boundaries within 64KB SRAM */
   .stack_heap : ALIGN(8) {
     Image$$STACKHEAP_START$$Base = .;
-    . = . + 16K; /* Heap */
+    . = . + 12K; /* Heap */
     Image$$STACKHEAP_SPLIT$$Base = .;
-    . = . + 16K; /* Stack */
+    . = . + 12K; /* Stack */
     Image$$STACKHEAP_END$$Limit = .;
     __stack_top = .;
   } > RAM
