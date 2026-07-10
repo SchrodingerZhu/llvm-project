@@ -159,7 +159,7 @@ int printf(const char *fmt, ...) {
     int long_cnt = 0;
     while (*fmt == 'l' || *fmt == 'z' || *fmt == 'h') {
       if (*fmt == 'l') long_cnt++;
-      if (*fmt == 'z') long_cnt = 2;
+      if (*fmt == 'z') long_cnt = 1; // size_t/uintptr_t is 32-bit (unsigned long) on Cortex-M
       fmt++;
     }
     char spec = *fmt++;

@@ -103,12 +103,16 @@ void print_stack_trace() {
   sp = (uintptr_t)__builtin_frame_address(0);
   asm("mov %0, pc" : "=r" (pc));
   printf("Stack trace:\n");
+  int depth = 0;
   do {
     printf("  pc %#zx sp %#zx\n", pc, sp);
-    pc = ((uintptr_t *)sp)[1];
-    sp = ((uintptr_t *)sp)[0];
-  } while (!(pc == 0 || pc == 0xdfdfcfcf || pc == 0xdfdfdfdf || sp == 0 ||
-             sp < stack_low || sp > stack_high));
+    pc = ((uintptr_t *)sp)[0];
+    uintptr_t next_sp = ((uintptr_t *)sp)[1];
+    if (next_sp <= sp)
+      break;
+    sp = next_sp;
+  } while (++depth < 32 && !(pc == 0 || pc == 0xdfdfcfcf || pc == 0xdfdfdfdf ||
+                             sp == 0 || sp < stack_low || sp > stack_high));
 }
 
 } // namespace
@@ -495,6 +499,18 @@ extern "C" void __asan_allocas_unpoison(uintptr_t top, uintptr_t bottom) {
   unpoison_mem(top, bottom - top, 0, 0);
 }
 
+// {{{ Shadow of Shadow Protection
+
+extern "C" void __asan_protect_shadow_of_shadow(uintptr_t shadow_start,
+                                                uintptr_t shadow_end) {
+  uintptr_t sos_start = (uintptr_t)get_shadow_addr(shadow_start);
+  uintptr_t sos_end = (uintptr_t)get_shadow_addr(shadow_end);
+  if (sos_end > sos_start) {
+    // Pre-poison the shadow-of-shadow region with 0xff so inline checks (*S(A) != 0) naturally trap.
+    poison_mem(sos_start, sos_end - sos_start, 0xff);
+  }
+}
+
 // }}}
 
 #ifdef ENABLE_MPU
@@ -506,6 +522,16 @@ void setup_mpu() {
   MPU.addRegion(0x00000000, 0x20000000, MPUv8M::All_RO, false); // ROM
   MPU.addRegion(0x20000000, 0x40000000, MPUv8M::All_RW, false); // RAM
   MPU.addRegion(0xe0000000, 0xffffffe0, MPUv8M::All_RW, false); // System
+
+  // Pre-poison and lock down the shadow-of-shadow region for RAM shadows
+  uintptr_t shadow_start = (uintptr_t)&Image$$ER_SHADOW_1$$Base;
+  uintptr_t shadow_end = (uintptr_t)&Image$$ER_SHADOW_4$$Limit;
+  __asan_protect_shadow_of_shadow(shadow_start, shadow_end);
+  uintptr_t sos_start = (uintptr_t)get_shadow_addr(shadow_start);
+  uintptr_t sos_end = (uintptr_t)get_shadow_addr(shadow_end);
+  if (sos_end > sos_start)
+    MPU.addRegion(sos_start, sos_end, MPUv8M::All_RO, false); // Shadow of Shadow (RO)
+
   MPU.enable();
 }
 #endif
@@ -517,7 +543,12 @@ struct StackAllocator {
 
 extern "C" {
   int __asan_option_detect_stack_use_after_return = 0;
-  void __asan_init() {}
+  void __asan_init() {
+#ifndef ENABLE_MPU
+    __asan_protect_shadow_of_shadow((uintptr_t)&Image$$ER_SHADOW_1$$Base,
+                                    (uintptr_t)&Image$$ER_SHADOW_4$$Limit);
+#endif
+  }
   void __asan_version_mismatch_check_v8() {}
   void *__asan_stack_malloc_0(size_t size) { return nullptr; }
   void *__asan_stack_malloc_1(size_t size) { return nullptr; }
