@@ -1374,6 +1374,26 @@ static void readConfigs(Ctx &ctx, opt::InputArgList &args) {
       hasZOption(args, "muldefs") ||
       args.hasFlag(OPT_allow_multiple_definition,
                    OPT_no_allow_multiple_definition, false);
+
+  if (StringRef s = args.getLastArgValue(OPT_asan_shadow_mode); !s.empty()) {
+    if (s == "split")
+      ctx.arg.asanShadowMode = AsanShadowMode::Split;
+    else if (s == "offset")
+      ctx.arg.asanShadowMode = AsanShadowMode::Offset;
+    else if (s != "none")
+      ErrAlways(ctx) << "unknown --asan-shadow-mode: " << s;
+  }
+  ctx.arg.asanShadowScale = args::getInteger(args, OPT_asan_shadow_scale, 3);
+  if (auto *arg = args.getLastArg(OPT_asan_shadow_offset))
+    ctx.arg.asanShadowOffset = args::getInteger(args, OPT_asan_shadow_offset, 0);
+  if (auto *arg = args.getLastArg(OPT_asan_split_shadow_slice_mask))
+    ctx.arg.asanSplitShadowSliceMask =
+        args::getInteger(args, OPT_asan_split_shadow_slice_mask, 0xf0000000ULL);
+  if (auto *arg = args.getLastArg(OPT_asan_split_shadow_offset_mask))
+    ctx.arg.asanSplitShadowOffsetMask = args::getInteger(
+        args, OPT_asan_split_shadow_offset_mask, ~ctx.arg.asanSplitShadowSliceMask);
+  else
+    ctx.arg.asanSplitShadowOffsetMask = ~ctx.arg.asanSplitShadowSliceMask;
   ctx.arg.memtagHeap = hasZOption(args, "memtag-heap");
   ctx.arg.memtagStack = hasZOption(args, "memtag-stack");
   ctx.arg.memtagAndroidNote = args.hasArg(OPT_android_memtag_note);

@@ -238,6 +238,8 @@ public:
   SmallVector<std::pair<StringRef, unsigned>, 0> archiveFiles;
 };
 
+enum class AsanShadowMode { None, Split, Offset };
+
 // This struct contains the global configuration for the linker.
 // Most fields are direct mapping from the command line options
 // and such fields have the same name as the corresponding options.
@@ -298,6 +300,22 @@ struct Config {
   llvm::StringRef thinLTOPrefixReplaceNew;
   llvm::StringRef thinLTOPrefixReplaceNativeObject;
   std::string rpath;
+  AsanShadowMode asanShadowMode = AsanShadowMode::None;
+  int asanShadowScale = 3;
+  uint64_t asanShadowOffset = 0;
+  uint64_t asanSplitShadowSliceMask = 0xf0000000ULL;
+  uint64_t asanSplitShadowOffsetMask = 0x0fffffffULL;
+
+  uint64_t getAsanShadowAddress(uint64_t addr) const {
+    if (asanShadowMode == AsanShadowMode::Split) {
+      uint64_t top = addr & asanSplitShadowSliceMask;
+      uint64_t bottom = (addr & asanSplitShadowOffsetMask) >> asanShadowScale;
+      return (top | bottom) + asanShadowOffset;
+    }
+    if (asanShadowMode == AsanShadowMode::Offset)
+      return (addr >> asanShadowScale) + asanShadowOffset;
+    return 0;
+  }
   llvm::SmallVector<VersionDefinition, 0> versionDefinitions;
   llvm::SmallVector<llvm::StringRef, 0> auxiliaryList;
   llvm::SmallVector<llvm::StringRef, 0> filterList;

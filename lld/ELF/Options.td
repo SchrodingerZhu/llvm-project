@@ -36,6 +36,12 @@ multiclass B<string name, string help1, string help2> {
 
 defm auxiliary: Eq<"auxiliary", "Set DT_AUXILIARY field to the specified name">;
 
+defm asan_shadow_mode: EEq<"asan-shadow-mode", "AddressSanitizer shadow mapping mode (none, split, offset)">;
+defm asan_shadow_scale: EEq<"asan-shadow-scale", "AddressSanitizer shadow mapping scale (default: 3)">;
+defm asan_shadow_offset: EEq<"asan-shadow-offset", "AddressSanitizer shadow mapping offset (default: 0)">;
+defm asan_split_shadow_slice_mask: EEq<"asan-split-shadow-slice-mask", "Bitmask for extracting the region slice when split mode is used">;
+defm asan_split_shadow_offset_mask: EEq<"asan-split-shadow-offset-mask", "Bitmask for extracting the within-slice offset when split mode is used">;
+
 def be8: F<"be8">, HelpText<"write a Big Endian ELF file using BE8 format (AArch32 only)">;
 
 def Bno_symbolic: F<"Bno-symbolic">, HelpText<"Don't bind default visibility defined symbols locally for -shared (default)">;
