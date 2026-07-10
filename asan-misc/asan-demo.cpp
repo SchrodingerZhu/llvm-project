@@ -1,11 +1,4 @@
-#include <stdio.h>
-#include <stdint.h>
-#include <stdlib.h>
-#include <assert.h>
-#include <string.h>
-#include <ctype.h>
-#include <errno.h>
-#include <alloca.h>
+#include "baremetal_libc.h"
 
 
 void demo_use_after_free() {
@@ -80,10 +73,10 @@ void demo_use_after_return() {
   printf("*pa: %d\n", *pa);
 }
 
-int main(int argc, const char *argv[]) {
+extern "C" void run_demo(int argc, const char *argv[]) {
   if (argc != 2) {
     printf("Usage: %s <n>\n", argv[0]);
-    return 1;
+    return;
   }
   int test_num = atoi(argv[1]);
   switch (test_num) {

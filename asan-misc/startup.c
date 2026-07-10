@@ -29,12 +29,27 @@ void Reset_Handler(void) {
     *dst++ = 0;
   }
 
+  /* Copy .shadow_rw section from ROM to RAM */
+  extern uint32_t __shadow_rw_load, __shadow_rw_start, __shadow_rw_end;
+  src = &__shadow_rw_load;
+  dst = &__shadow_rw_start;
+  while (dst < &__shadow_rw_end) {
+    *dst++ = *src++;
+  }
+
+#ifndef TEST_ID
+#define TEST_ID 0
+#endif
+
+#define STR_HELPER(x) #x
+#define STR(x) STR_HELPER(x)
+
   baremetal_puts("\n===================================================\n");
   baremetal_puts("[BOOT] QEMU Bare-Metal Test Environment Initialized\n");
   baremetal_puts("===================================================\n");
 
-  const char *argv[] = { "asan-test", "0", NULL };
-  main(1, argv);
+  const char *argv[] = { "asan-test", STR(TEST_ID), NULL };
+  main(2, argv);
 
   baremetal_puts("[HALT] Test execution finished cleanly.\n");
   /* Exit QEMU or enter low power wait */

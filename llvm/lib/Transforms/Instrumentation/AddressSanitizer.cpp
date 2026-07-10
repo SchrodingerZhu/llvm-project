@@ -1489,17 +1489,19 @@ static bool isSupportedAddrspace(const Triple &TargetTriple, Value *Addr) {
 }
 
 Value *AddressSanitizer::memToShadow(Value *Shadow, IRBuilder<> &IRB) {
+  uint64_t PtrMask =
+      IntptrTy->getIntegerBitWidth() == 64 ? ~0ULL : ((1ULL << IntptrTy->getIntegerBitWidth()) - 1);
   Value *ShadowBase;
   if (LocalDynamicShadow)
     ShadowBase = LocalDynamicShadow;
   else
-    ShadowBase = ConstantInt::get(IntptrTy, Mapping.Offset);
+    ShadowBase = ConstantInt::get(IntptrTy, Mapping.Offset & PtrMask);
 
   if (Mapping.Split) {
     Value *TopBits =
-        IRB.CreateAnd(Shadow, ConstantInt::get(IntptrTy, Mapping.SplitSliceMask));
+        IRB.CreateAnd(Shadow, ConstantInt::get(IntptrTy, Mapping.SplitSliceMask & PtrMask));
     Value *BottomBits =
-        IRB.CreateAnd(Shadow, ConstantInt::get(IntptrTy, Mapping.SplitOffsetMask));
+        IRB.CreateAnd(Shadow, ConstantInt::get(IntptrTy, Mapping.SplitOffsetMask & PtrMask));
     BottomBits = IRB.CreateLShr(BottomBits, Mapping.Scale);
     Shadow = IRB.CreateOr(TopBits, BottomBits);
     return IRB.CreateAdd(Shadow, ShadowBase);
@@ -2043,12 +2045,14 @@ Instruction *AddressSanitizer::genAMDGPUReportBlock(IRBuilder<> &IRB,
 Instruction *
 AddressSanitizer::instrumentBareMetalAddress(Instruction *InsertBefore,
                                              Value *Addr) {
+  uint64_t PtrMask =
+      IntptrTy->getIntegerBitWidth() == 64 ? ~0ULL : ((1ULL << IntptrTy->getIntegerBitWidth()) - 1);
   if (Mapping.Min) {
     // Insert a cmp+br to skip sanitising low addresses, such as ROM.
     IRBuilder<> IRB(InsertBefore);
     Value *AddrInt = IRB.CreatePtrToInt(Addr, IntptrTy);
     Value *Cmp =
-        IRB.CreateICmpUGE(AddrInt, ConstantInt::get(IntptrTy, *Mapping.Min));
+        IRB.CreateICmpUGE(AddrInt, ConstantInt::get(IntptrTy, (*Mapping.Min) & PtrMask));
     Value *SkipLanding = SplitBlockAndInsertIfThen(Cmp, InsertBefore, false);
     InsertBefore = cast<Instruction>(SkipLanding);
   }
@@ -2058,7 +2062,7 @@ AddressSanitizer::instrumentBareMetalAddress(Instruction *InsertBefore,
     IRBuilder<> IRB(InsertBefore);
     Value *AddrInt = IRB.CreatePtrToInt(Addr, IntptrTy);
     Value *Cmp =
-        IRB.CreateICmpULT(AddrInt, ConstantInt::get(IntptrTy, *Mapping.Max));
+        IRB.CreateICmpULT(AddrInt, ConstantInt::get(IntptrTy, (*Mapping.Max) & PtrMask));
     Value *SkipLanding = SplitBlockAndInsertIfThen(Cmp, InsertBefore, false);
     InsertBefore = cast<Instruction>(SkipLanding);
   }
