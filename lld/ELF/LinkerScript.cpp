@@ -76,6 +76,18 @@ StringRef LinkerScript::getOutputSectionName(const InputSectionBase *s) const {
   if (s->name == "COMMON")
     return ".bss";
 
+  if (ctx.arg.asanShadowMode != AsanShadowMode::None &&
+      (s->flags & SHF_LINK_ORDER) &&
+      (s->name.starts_with(".shadow") || s->name.starts_with("__shadow"))) {
+    if (auto *isec = dyn_cast<InputSection>(s)) {
+      if (InputSection *target = isec->getLinkOrderDep()) {
+        if (target->flags & SHF_WRITE)
+          return "__shadow_rw";
+        return "__shadow_ro";
+      }
+    }
+  }
+
   if (hasSectionsCommand)
     return s->name;
 
@@ -581,7 +593,20 @@ LinkerScript::computeInputSections(const InputSectionDescription *cmd,
           continue;
 
         // Check the name early to improve performance in the common case.
-        if (!pat.sectionPat.match(sec->name))
+        StringRef matchName = sec->name;
+        if (ctx.arg.asanShadowMode != AsanShadowMode::None &&
+            (sec->flags & SHF_LINK_ORDER) &&
+            (sec->name.starts_with(".shadow") || sec->name.starts_with("__shadow"))) {
+          if (auto *isec = dyn_cast<InputSection>(sec)) {
+            if (InputSection *target = isec->getLinkOrderDep()) {
+              if (target->flags & SHF_WRITE)
+                matchName = "__shadow_rw";
+              else
+                matchName = "__shadow_ro";
+            }
+          }
+        }
+        if (!pat.sectionPat.match(matchName))
           continue;
 
         if (!cmd->matchesFile(*sec->file) || pat.excludesFile(*sec->file) ||
