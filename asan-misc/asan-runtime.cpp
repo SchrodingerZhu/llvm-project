@@ -447,12 +447,21 @@ extern "C" void *__real_malloc(size_t);
 extern "C" void *$Super$$malloc(size_t size) { return __real_malloc(size); }
 
 extern "C" void *__wrap_malloc(size_t user_size) {
-  size_t real_size = (user_size + 16 + 7) & ~0x7;
-  size_t redzone_size = real_size - user_size;
+  size_t header_size = 8;
+  size_t real_size = (user_size + header_size + 16 + 7) & ~0x7;
   void *real_allocation = __real_malloc(real_size);
-  if (real_allocation)
-    unpoison_mem((uintptr_t)real_allocation, user_size, redzone_size, 0xf0);
-  return real_allocation;
+  if (!real_allocation)
+    return nullptr;
+
+  void *user_ptr = (void *)((uintptr_t)real_allocation + header_size);
+  *(size_t *)real_allocation = user_size;
+
+  // Poison the whole allocation first as heap redzone (0xf0)
+  poison_mem((uintptr_t)real_allocation, real_size, 0xf0);
+  // Unpoison the user part
+  unpoison_mem((uintptr_t)user_ptr, user_size, 0, 0);
+
+  return user_ptr;
 }
 extern "C" void *$Sub$$malloc(size_t user_size) { return __wrap_malloc(user_size); }
 
@@ -460,7 +469,16 @@ extern "C" void __real_free(void *);
 extern "C" void *$Super$$free(void *p) { __real_free(p); return nullptr; }
 
 extern "C" void __wrap_free(void *p) {
-  __real_free(p);
+  if (!p)
+    return;
+  void *real_allocation = (void *)((uintptr_t)p - 8);
+  size_t user_size = *(size_t *)real_allocation;
+
+  // Poison the user region as freed (0xfd)
+  size_t real_size = (user_size + 8 + 16 + 7) & ~0x7;
+  poison_mem((uintptr_t)real_allocation, real_size, 0xfd);
+
+  __real_free(real_allocation);
 }
 extern "C" void $Sub$$free(void *p) { __wrap_free(p); }
 
