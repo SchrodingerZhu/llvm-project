@@ -2,14 +2,15 @@
 CC = ../build/bin/clang
 CXX = ../build/bin/clang
 LD = ../build/bin/ld.lld
-CFLAGS = --target=arm-none-eabi -mcpu=cortex-m3 -mthumb -O1 -g -ffreestanding -Wno-array-bounds -fno-omit-frame-pointer -mno-omit-leaf-frame-pointer
+CFLAGS = --target=arm-none-eabi -mcpu=cortex-m3 -mthumb -O1 -g -ffreestanding -Wno-array-bounds -fno-omit-frame-pointer -mno-omit-leaf-frame-pointer -I../libc -DLIBC_FULL_BUILD -DLIBC_NAMESPACE=__llvm_libc
 LDFLAGS = -T baremetal.ld --fatal-warnings --asan-shadow-mode=split --asan-shadow-offset=32768 --wrap=malloc --wrap=free
 
 # Once clang is rebuilt with new options, you can add:
 ASAN_FLAGS = -fsanitize=address -mllvm -asan-split-shadow -mllvm -asan-mapping-offset=32768 -mllvm -asan-create-global-shadow -mllvm -asan-globals-metadata-section -mllvm -asan-small-global-metadata
 
+LIBC_OBJS = freelist.o freetrie.o freelist_heap.o malloc_libc.o free_libc.o
 SRCS = startup.c main.cpp baremetal_libc.cpp asan-runtime.cpp asan-demo.cpp
-OBJS = startup.o main.o baremetal_libc.o asan-runtime.o asan-demo.o
+OBJS = startup.o main.o baremetal_libc.o asan-runtime.o asan-demo.o $(LIBC_OBJS)
 TARGET = firmware.elf
 
 all: $(TARGET)
@@ -30,6 +31,21 @@ asan-runtime.o: asan-runtime.cpp
 
 asan-demo.o: asan-demo.cpp
 	$(CXX) $(CFLAGS) $(ASAN_FLAGS) -O0 -DSPLIT_SHADOW -DSMALL_GLOBAL_METADATA -c $< -o $@
+
+freelist.o: ../libc/src/__support/freelist.cpp
+	$(CXX) $(CFLAGS) -DNDEBUG -c $< -o $@
+
+freetrie.o: ../libc/src/__support/freetrie.cpp
+	$(CXX) $(CFLAGS) -DNDEBUG -c $< -o $@
+
+freelist_heap.o: ../libc/src/__support/freelist_heap.cpp
+	$(CXX) $(CFLAGS) -DNDEBUG -c $< -o $@
+
+malloc_libc.o: ../libc/src/stdlib/baremetal/malloc.cpp
+	$(CXX) $(CFLAGS) -DNDEBUG -c $< -o $@
+
+free_libc.o: ../libc/src/stdlib/baremetal/free.cpp
+	$(CXX) $(CFLAGS) -DNDEBUG -c $< -o $@
 
 $(TARGET): $(OBJS)
 	$(LD) $(LDFLAGS) $(OBJS) -o $@

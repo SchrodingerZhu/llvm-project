@@ -1,4 +1,6 @@
 #include "baremetal_libc.h"
+#include "src/stdlib/malloc.h"
+#include "src/stdlib/free.h"
 
 extern "C" void baremetal_puts(const char *s);
 extern uint32_t __stack_top;
@@ -41,23 +43,12 @@ void abort(void) {
   while (1) {}
 }
 
-static char *heap_curr = nullptr;
-
 void *malloc(size_t size) {
-  if (!heap_curr)
-    heap_curr = &Image$$STACKHEAP_START$$Base;
-  // Align to 8 bytes
-  size = (size + 7) & ~7ULL;
-  if (heap_curr + size >= &Image$$STACKHEAP_SPLIT$$Base)
-    return nullptr;
-  void *ret = heap_curr;
-  heap_curr += size;
-  return ret;
+  return LIBC_NAMESPACE::malloc(size);
 }
 
 void free(void *ptr) {
-  // Simple bump allocator doesn't reclaim memory
-  (void)ptr;
+  LIBC_NAMESPACE::free(ptr);
 }
 
 long long strtoll(const char *nptr, char **endptr, int base) {

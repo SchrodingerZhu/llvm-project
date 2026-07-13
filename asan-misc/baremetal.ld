@@ -68,10 +68,11 @@ SECTIONS {
 
   __shadow_rw_load = LOADADDR(.shadow_rw);
 
-  /* Stack and Heap boundaries within 64KB SRAM */
   .stack_heap : ALIGN(8) {
     Image$$STACKHEAP_START$$Base = .;
+    _end = .;
     . = . + 12K; /* Heap */
+    __llvm_libc_heap_limit = .;
     Image$$STACKHEAP_SPLIT$$Base = .;
     . = . + 12K; /* Stack */
     Image$$STACKHEAP_END$$Limit = .;

@@ -116,6 +116,14 @@ extern "C" void run_demo(int argc, const char *argv[]) {
     printf("Running demo_use_after_return:\n");
     demo_use_after_return();
     break;
+  case 9:
+    printf("Running demo_use_after_free (via Case 9):\n");
+    demo_use_after_free();
+    break;
+  case 10:
+    printf("Running demo_heap_overflow (via Case 10):\n");
+    demo_heap_overflow<short, 3>();
+    break;
   default:
     printf("Invalid test num\n");
     break;
