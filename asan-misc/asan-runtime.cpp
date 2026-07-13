@@ -106,8 +106,8 @@ void print_stack_trace() {
   int depth = 0;
   do {
     printf("  pc %#zx sp %#zx\n", pc, sp);
-    pc = ((uintptr_t *)sp)[0];
-    uintptr_t next_sp = ((uintptr_t *)sp)[1];
+    pc = ((uintptr_t *)sp)[1];
+    uintptr_t next_sp = ((uintptr_t *)sp)[0];
     if (next_sp <= sp)
       break;
     sp = next_sp;
