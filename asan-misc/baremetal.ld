@@ -21,6 +21,13 @@ SECTIONS {
     Image$$ER_RO_DATA$$Limit = .;
   } > ROM
 
+  .init_array : ALIGN(4) {
+    __init_array_start = .;
+    KEEP(*(.init_array*))
+    KEEP(*(.ctors*))
+    __init_array_end = .;
+  } > ROM
+
   .ARM.extab : ALIGN(4) { *(.ARM.extab* .gnu.linkonce.armextab.*) } > ROM
   .ARM.exidx : ALIGN(4) { *(.ARM.exidx* .gnu.linkonce.armexidx.*) } > ROM
 
@@ -29,13 +36,6 @@ SECTIONS {
     __asan_global_metadata$$Base = .;
     *(__asan_global_metadata*)
     __asan_global_metadata$$Limit = .;
-  } > ROM
-
-  /* ASan Static ROM Shadow Section at 0x00008000 */
-  .shadow_ro 0x00008000 : ALIGN(8) {
-    Image$$ER_SHADOW_ROM$$Base = .;
-    *(__shadow_ro*)
-    Image$$ER_SHADOW_ROM$$Limit = .;
   } > ROM
 
   .data : ALIGN(4) {
@@ -57,16 +57,12 @@ SECTIONS {
     Image$$ER_RW_ZI$$Limit = .;
   } > RAM
 
-  /* ASan Static RAM Shadow Section at 0x20008000 */
-  .shadow_rw 0x20008000 : ALIGN(8) {
-    __shadow_rw_start = .;
-    Image$$ER_SHADOW_1$$Base = .;
-    *(__shadow_rw*)
-    Image$$ER_SHADOW_4$$Limit = .;
-    __shadow_rw_end = .;
-  } > RAM AT > ROM
-
-  __shadow_rw_load = LOADADDR(.shadow_rw);
+  /* Reserve ASan Dynamic Shadow Memory Region in RAM at 0x20004000 */
+  .shadow_mem 0x20004000 (NOLOAD) : ALIGN(8) {
+    __shadow_mem_start = .;
+    . = . + 8K; /* 8KB Dynamic Shadow Space */
+    __shadow_mem_end = .;
+  } > RAM
 
   .stack_heap : ALIGN(8) {
     Image$$STACKHEAP_START$$Base = .;

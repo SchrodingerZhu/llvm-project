@@ -493,6 +493,11 @@ static cl::opt<uint64_t> ClSplitShadowOffsetMask(
     cl::desc("Bitmask for extracting the within-slice offset when -asan-split-shadow is enabled (defaults to ~slice-mask if 0)"),
     cl::Hidden, cl::init(0));
 
+static cl::opt<uint64_t> ClLowerAsanRegionShadowSize(
+    "asan-lower-region-shadow-size",
+    cl::desc("Size of lower ASan region shadow memory in bytes"),
+    cl::Hidden, cl::init(0));
+
 static cl::opt<bool> ClGlobalsMetadataSection(
     "asan-globals-metadata-section",
     cl::desc("Emit global variable descriptions in a named section for baremetal/linker-script targets"),
@@ -530,6 +535,7 @@ struct ShadowMapping {
   bool Split;
   uint64_t SplitSliceMask;
   uint64_t SplitOffsetMask;
+  uint64_t LowerRegionShadowSize;
   bool OrShadowOffset;
   bool InGlobal;
 };
@@ -671,6 +677,7 @@ static ShadowMapping getShadowMapping(const Triple &TargetTriple, int LongSize,
     Mapping.SplitOffsetMask = ClSplitShadowOffsetMask;
   else
     Mapping.SplitOffsetMask = ~Mapping.SplitSliceMask;
+  Mapping.LowerRegionShadowSize = ClLowerAsanRegionShadowSize;
 
   // OR-ing shadow offset if more efficient (at least on x86) if the offset
   // is a power of two, but on ppc64 and loongarch64 we have to use add since
@@ -1498,11 +1505,25 @@ Value *AddressSanitizer::memToShadow(Value *Shadow, IRBuilder<> &IRB) {
     ShadowBase = ConstantInt::get(IntptrTy, Mapping.Offset & PtrMask);
 
   if (Mapping.Split) {
+    Value *OffsetInRegion =
+        IRB.CreateAnd(Shadow, ConstantInt::get(IntptrTy, Mapping.SplitOffsetMask & PtrMask));
+
+    if (Mapping.LowerRegionShadowSize > 0) {
+      uint64_t AlignedLowerShadowSize = (Mapping.LowerRegionShadowSize + 7) & ~7ULL;
+      Value *UpperRegionBit =
+          IRB.CreateAnd(Shadow, ConstantInt::get(IntptrTy, Mapping.SplitSliceMask & PtrMask));
+      Value *RegionSign = IRB.CreateSub(
+          UpperRegionBit, ConstantInt::get(IntptrTy, Mapping.SplitSliceMask & PtrMask));
+      Value *EffectiveDistance = IRB.CreateAdd(RegionSign, OffsetInRegion);
+      Value *ScaledDistance = IRB.CreateAShr(EffectiveDistance, Mapping.Scale);
+      Value *EffectiveBase = IRB.CreateAdd(
+          ShadowBase, ConstantInt::get(IntptrTy, AlignedLowerShadowSize & PtrMask));
+      return IRB.CreateAdd(ScaledDistance, EffectiveBase);
+    }
+
     Value *TopBits =
         IRB.CreateAnd(Shadow, ConstantInt::get(IntptrTy, Mapping.SplitSliceMask & PtrMask));
-    Value *BottomBits =
-        IRB.CreateAnd(Shadow, ConstantInt::get(IntptrTy, Mapping.SplitOffsetMask & PtrMask));
-    BottomBits = IRB.CreateLShr(BottomBits, Mapping.Scale);
+    Value *BottomBits = IRB.CreateLShr(OffsetInRegion, Mapping.Scale);
     Shadow = IRB.CreateOr(TopBits, BottomBits);
     return IRB.CreateAdd(Shadow, ShadowBase);
   } else {
@@ -2784,6 +2805,7 @@ void ModuleAddressSanitizer::instrumentGlobals(IRBuilder<> &IRB,
                                      IntptrTy, IntptrTy, IntptrTy, IntptrTy);
   SmallVector<GlobalVariable *, 16> NewGlobals(n);
   SmallVector<Constant *, 16> Initializers(n);
+  bool HasDynamicallyInitializedGlobals = false;
 
   for (size_t i = 0; i < n; i++) {
     GlobalVariable *G = GlobalsToChange[i];

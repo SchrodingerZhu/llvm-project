@@ -3,10 +3,10 @@ CC = ../build/bin/clang
 CXX = ../build/bin/clang
 LD = ../build/bin/ld.lld
 CFLAGS = --target=arm-none-eabi -mcpu=cortex-m3 -mthumb -O1 -g -ffreestanding -Wno-array-bounds -fno-omit-frame-pointer -mno-omit-leaf-frame-pointer -I../libc -DLIBC_FULL_BUILD -DLIBC_NAMESPACE=__llvm_libc
-LDFLAGS = -T baremetal.ld --fatal-warnings --asan-shadow-mode=split --asan-shadow-offset=32768 --wrap=malloc --wrap=free
+LDFLAGS = -T baremetal.ld --fatal-warnings --wrap=malloc --wrap=free
 
 # Once clang is rebuilt with new options, you can add:
-ASAN_FLAGS = -fsanitize=address -mllvm -asan-split-shadow -mllvm -asan-mapping-offset=32768 -mllvm -asan-create-global-shadow -mllvm -asan-globals-metadata-section -mllvm -asan-small-global-metadata
+ASAN_FLAGS = -fsanitize=address -mllvm -asan-split-shadow -mllvm -asan-split-shadow-slice-mask=0x20000000 -mllvm -asan-split-shadow-offset-mask=0x1fffffff -mllvm -asan-lower-region-shadow-size=4096 -mllvm -asan-mapping-offset=536887296 -mllvm -asan-globals-metadata-section
 
 LIBC_OBJS = freelist.o freetrie.o freelist_heap.o malloc_libc.o free_libc.o
 SRCS = startup.c main.cpp baremetal_libc.cpp asan-runtime.cpp asan-demo.cpp
@@ -27,10 +27,10 @@ baremetal_libc.o: baremetal_libc.cpp
 	$(CXX) $(CFLAGS) -c $< -o $@
 
 asan-runtime.o: asan-runtime.cpp
-	$(CXX) $(CFLAGS) -DSPLIT_SHADOW -DSMALL_GLOBAL_METADATA -c $< -o $@
+	$(CXX) $(CFLAGS) -DSPLIT_SHADOW -c $< -o $@
 
 asan-demo.o: asan-demo.cpp
-	$(CXX) $(CFLAGS) $(ASAN_FLAGS) -O0 -DSPLIT_SHADOW -DSMALL_GLOBAL_METADATA -c $< -o $@
+	$(CXX) $(CFLAGS) $(ASAN_FLAGS) -O0 -DSPLIT_SHADOW -c $< -o $@
 
 freelist.o: ../libc/src/__support/freelist.cpp
 	$(CXX) $(CFLAGS) -DNDEBUG -c $< -o $@

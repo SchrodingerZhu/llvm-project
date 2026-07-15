@@ -29,12 +29,22 @@ void Reset_Handler(void) {
     *dst++ = 0;
   }
 
-  /* Copy .shadow_rw section from ROM to RAM */
-  extern uint32_t __shadow_rw_load, __shadow_rw_start, __shadow_rw_end;
-  src = &__shadow_rw_load;
-  dst = &__shadow_rw_start;
-  while (dst < &__shadow_rw_end) {
-    *dst++ = *src++;
+  /* Zero out dynamic shadow memory section */
+  extern uint32_t __shadow_mem_start, __shadow_mem_end;
+  dst = &__shadow_mem_start;
+  while (dst < &__shadow_mem_end) {
+    *dst++ = 0;
+  }
+
+  baremetal_puts("\n===================================================\n");
+  baremetal_puts("[BOOT] QEMU Bare-Metal Test Environment Initialized\n");
+  baremetal_puts("===================================================\n");
+
+  /* Execute constructors in .init_array */
+  typedef void (*init_func_t)(void);
+  extern init_func_t __init_array_start[], __init_array_end[];
+  for (init_func_t *f = __init_array_start; f < __init_array_end; ++f) {
+    if (*f) (*f)();
   }
 
 #ifndef TEST_ID
@@ -43,10 +53,6 @@ void Reset_Handler(void) {
 
 #define STR_HELPER(x) #x
 #define STR(x) STR_HELPER(x)
-
-  baremetal_puts("\n===================================================\n");
-  baremetal_puts("[BOOT] QEMU Bare-Metal Test Environment Initialized\n");
-  baremetal_puts("===================================================\n");
 
   const char *argv[] = { "asan-test", STR(TEST_ID), NULL };
   main(2, argv);
