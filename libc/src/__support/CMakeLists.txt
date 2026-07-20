@@ -57,6 +57,7 @@ add_header_library(
     freestore.h
   DEPENDS
     .freetrie
+    .tlsf_table
 )
 
 add_header_library(

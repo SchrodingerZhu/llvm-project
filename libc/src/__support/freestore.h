@@ -15,18 +15,32 @@
 #define LLVM_LIBC_SRC___SUPPORT_FREESTORE_H
 
 #include "freetrie.h"
+#include "tlsf_table.h"
 
 namespace LIBC_NAMESPACE_DECL {
 
+/// Configuration for TLSFFreeStore.
+template <size_t UNIT_SIZE_VAL, size_t STEP_SIZE_BITS_VAL,
+          size_t NUM_STEP_BITS_VAL, size_t NUM_TABLE_ENTRIES_VAL>
+struct TLSFFreeStoreConfig {
+  static constexpr size_t UNIT_SIZE = UNIT_SIZE_VAL;
+  static constexpr size_t STEP_SIZE_BITS = STEP_SIZE_BITS_VAL;
+  static constexpr size_t NUM_STEP_BITS = NUM_STEP_BITS_VAL;
+  static constexpr size_t NUM_TABLE_ENTRIES = NUM_TABLE_ENTRIES_VAL;
+};
+
 /// A best-fit store of variously-sized free blocks. Blocks can be inserted and
 /// removed in logarithmic time.
-class FreeStore {
+template <typename CONFIG> class TLSFFreeStoreImpl {
   friend class FreeListHeap;
 
 public:
-  FreeStore() = default;
-  FreeStore(const FreeStore &other) = delete;
-  FreeStore &operator=(const FreeStore &other) = delete;
+  using Table = TLSFTable<FreeList, CONFIG::UNIT_SIZE, CONFIG::STEP_SIZE_BITS,
+                          CONFIG::NUM_STEP_BITS, CONFIG::NUM_TABLE_ENTRIES>;
+
+  LIBC_INLINE TLSFFreeStoreImpl() = default;
+  TLSFFreeStoreImpl(const TLSFFreeStoreImpl &other) = delete;
+  TLSFFreeStoreImpl &operator=(const TLSFFreeStoreImpl &other) = delete;
 
   /// Sets the range of possible block sizes. This can only be called when the
   /// trie is empty.
@@ -36,15 +50,15 @@ public:
 
   /// Insert a free block. If the block is too small to be tracked, nothing
   /// happens.
-  void insert(BlockRef block);
+  LIBC_INLINE void insert(BlockRef block);
 
   /// Remove a free block. If the block is too small to be tracked, nothing
   /// happens.
-  void remove(BlockRef block);
+  LIBC_INLINE void remove(BlockRef block);
 
   /// Remove a best-fit free block that can contain the given size when
   /// allocated. Returns nullptr if there is no such block.
-  BlockRef remove_best_fit(size_t size);
+  LIBC_INLINE BlockRef remove_best_fit(size_t size);
 
 private:
   static constexpr size_t MIN_OUTER_SIZE = align_up(
@@ -61,14 +75,16 @@ private:
     return block.outer_size() < MIN_LARGE_OUTER_SIZE;
   }
 
-  FreeList &small_list(BlockRef block);
-  FreeList *find_best_small_fit(size_t size);
+  LIBC_INLINE FreeList &small_list(BlockRef block);
+  LIBC_INLINE FreeList *find_best_small_fit(size_t size);
 
   cpp::array<FreeList, NUM_SMALL_SIZES> small_lists;
   FreeTrie large_trie;
+  Table table;
 };
 
-LIBC_INLINE void FreeStore::insert(BlockRef block) {
+template <typename CONFIG>
+LIBC_INLINE void TLSFFreeStoreImpl<CONFIG>::insert(BlockRef block) {
   if (too_small(block))
     return;
   if (is_small(block))
@@ -77,7 +93,8 @@ LIBC_INLINE void FreeStore::insert(BlockRef block) {
     large_trie.push(block);
 }
 
-LIBC_INLINE void FreeStore::remove(BlockRef block) {
+template <typename CONFIG>
+LIBC_INLINE void TLSFFreeStoreImpl<CONFIG>::remove(BlockRef block) {
   if (too_small(block))
     return;
   if (is_small(block)) {
@@ -88,7 +105,8 @@ LIBC_INLINE void FreeStore::remove(BlockRef block) {
   }
 }
 
-LIBC_INLINE BlockRef FreeStore::remove_best_fit(size_t size) {
+template <typename CONFIG>
+LIBC_INLINE BlockRef TLSFFreeStoreImpl<CONFIG>::remove_best_fit(size_t size) {
   if (FreeList *list = find_best_small_fit(size)) {
     BlockRef block = list->front();
     list->pop();
@@ -102,18 +120,25 @@ LIBC_INLINE BlockRef FreeStore::remove_best_fit(size_t size) {
   return BlockRef();
 }
 
-LIBC_INLINE FreeList &FreeStore::small_list(BlockRef block) {
+template <typename CONFIG>
+LIBC_INLINE FreeList &TLSFFreeStoreImpl<CONFIG>::small_list(BlockRef block) {
   LIBC_ASSERT(is_small(block) && "only legal for small blocks");
   return small_lists[(block.outer_size() - MIN_OUTER_SIZE) /
                      BlockRef::MIN_ALIGN];
 }
 
-LIBC_INLINE FreeList *FreeStore::find_best_small_fit(size_t size) {
+template <typename CONFIG>
+LIBC_INLINE FreeList *
+TLSFFreeStoreImpl<CONFIG>::find_best_small_fit(size_t size) {
   for (FreeList &list : small_lists)
     if (!list.empty() && list.size() >= size)
       return &list;
   return nullptr;
 }
+
+using DefaultFreeStoreConfig =
+    TLSFFreeStoreConfig<BlockRef::MIN_ALIGN, 2, 2, 2>;
+using FreeStore = TLSFFreeStoreImpl<DefaultFreeStoreConfig>;
 
 } // namespace LIBC_NAMESPACE_DECL
 
