@@ -41,6 +41,16 @@ if(NOT LIBC_TARGET_OS_IS_GPU)
   )
 
   add_libc_test(
+    tlsf_table_test
+    SUITE
+      libc-support-tests
+    SRCS
+      tlsf_table_test.cpp
+    DEPENDS
+      libc.src.__support.tlsf_table
+  )
+
+  add_libc_test(
     freestore_test
     SUITE
       libc-support-tests

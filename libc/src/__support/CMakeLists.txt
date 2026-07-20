@@ -59,6 +59,19 @@ add_header_library(
     .freetrie
 )
 
+add_header_library(
+  tlsf_table
+  HDRS
+    tlsf_table.h
+  DEPENDS
+    libc.hdr.stdint_proxy
+    libc.src.__support.CPP.array
+    libc.src.__support.CPP.bit
+    libc.src.__support.CPP.limits
+    libc.src.__support.macros.config
+    libc.src.__support.macros.optimization
+)
+
 libc_set_definition(libc_freelist_malloc_size "LIBC_FREELIST_MALLOC_SIZE=${LIBC_CONF_FREELIST_MALLOC_BUFFER_SIZE}")
 add_object_library(
   freelist_heap
