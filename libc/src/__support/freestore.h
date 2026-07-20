@@ -15,38 +15,34 @@
 #define LLVM_LIBC_SRC___SUPPORT_FREESTORE_H
 
 #include "freetrie.h"
+#include "src/__support/CPP/array.h"
+#include "src/__support/CPP/bit.h"
+#include "src/__support/macros/attributes.h"
 #include "tlsf_table.h"
 
 namespace LIBC_NAMESPACE_DECL {
 
 /// Configuration for TLSFFreeStore.
-template <size_t UNIT_SIZE_VAL, size_t STEP_SIZE_BITS_VAL,
-          size_t NUM_STEP_BITS_VAL, size_t NUM_TABLE_ENTRIES_VAL>
-struct TLSFFreeStoreConfig {
-  static constexpr size_t UNIT_SIZE = UNIT_SIZE_VAL;
-  static constexpr size_t STEP_SIZE_BITS = STEP_SIZE_BITS_VAL;
-  static constexpr size_t NUM_STEP_BITS = NUM_STEP_BITS_VAL;
-  static constexpr size_t NUM_TABLE_ENTRIES = NUM_TABLE_ENTRIES_VAL;
+struct DefaultTLSFFreeStoreConfig {
+  static constexpr size_t UNIT_SIZE = BlockRef::MIN_ALIGN;
+  static constexpr size_t STEP_SIZE_BITS = 3;
+  static constexpr size_t NUM_STEP_BITS = 2;
+  static constexpr size_t NUM_TABLE_ENTRIES = 2;
+  static constexpr size_t FREETRIE_THRESHOLD = 256;
 };
 
 /// A best-fit store of variously-sized free blocks. Blocks can be inserted and
 /// removed in logarithmic time.
-template <typename CONFIG> class TLSFFreeStoreImpl {
+template <typename CONFIG = DefaultTLSFFreeStoreConfig>
+class TLSFFreeStoreImpl {
   friend class FreeListHeap;
 
 public:
-  using Table = TLSFTable<FreeList, CONFIG::UNIT_SIZE, CONFIG::STEP_SIZE_BITS,
-                          CONFIG::NUM_STEP_BITS, CONFIG::NUM_TABLE_ENTRIES>;
-
   LIBC_INLINE TLSFFreeStoreImpl() = default;
   TLSFFreeStoreImpl(const TLSFFreeStoreImpl &other) = delete;
   TLSFFreeStoreImpl &operator=(const TLSFFreeStoreImpl &other) = delete;
 
-  /// Sets the range of possible block sizes. This can only be called when the
-  /// trie is empty.
-  LIBC_INLINE void set_range(FreeTrie::SizeRange range) {
-    large_trie.set_range(range);
-  }
+  LIBC_INLINE void set_range(FreeTrie::SizeRange) {}
 
   /// Insert a free block. If the block is too small to be tracked, nothing
   /// happens.
@@ -61,6 +57,32 @@ public:
   LIBC_INLINE BlockRef remove_best_fit(size_t size);
 
 private:
+  static constexpr uintptr_t UNIT_MASK = CONFIG::UNIT_SIZE - 1;
+
+  struct MixedFreeList {
+    uintptr_t payload;
+
+    LIBC_INLINE size_t list_length() const {
+      return static_cast<size_t>(payload & UNIT_MASK);
+    }
+    LIBC_INLINE FreeList load_list() const {
+      return {cpp::bit_cast<FreeList::Node *>(payload & ~UNIT_MASK)};
+    }
+    LIBC_INLINE FreeTrie load_trie(size_t min_size, size_t max_size) const {
+      return {cpp::bit_cast<FreeTrie::Node *>(payload & ~UNIT_MASK),
+              {min_size, max_size}};
+    }
+    LIBC_INLINE void store_list(FreeList list, size_t length) {
+      payload = cpp::bit_cast<uintptr_t>(list.begin()) | length;
+    }
+    LIBC_INLINE void store_trie(FreeTrie trie) { trie.store_root(&payload); }
+    LIBC_INLINE bool empty() const { return payload == 0; }
+  };
+
+  using Table =
+      TLSFTable<MixedFreeList, CONFIG::UNIT_SIZE, CONFIG::STEP_SIZE_BITS,
+                CONFIG::NUM_STEP_BITS, CONFIG::NUM_TABLE_ENTRIES>;
+
   static constexpr size_t MIN_OUTER_SIZE = align_up(
       BlockRef::HEADER_SIZE + sizeof(FreeList::Node), BlockRef::MIN_ALIGN);
   static constexpr size_t MIN_LARGE_OUTER_SIZE = align_up(
@@ -71,15 +93,21 @@ private:
   LIBC_INLINE static bool too_small(BlockRef block) {
     return block.outer_size() < MIN_OUTER_SIZE;
   }
-  LIBC_INLINE static bool is_small(BlockRef block) {
-    return block.outer_size() < MIN_LARGE_OUTER_SIZE;
+
+  LIBC_INLINE static bool bin_may_use_trie(size_t bin_idx) {
+    static constexpr size_t MIN_BIN_IDX_WITH_TRIE =
+        Table::size_to_bit_index(MIN_LARGE_OUTER_SIZE);
+    return bin_idx >= MIN_BIN_IDX_WITH_TRIE;
   }
 
-  LIBC_INLINE FreeList &small_list(BlockRef block);
-  LIBC_INLINE FreeList *find_best_small_fit(size_t size);
+  LIBC_INLINE bool bin_is_using_trie(size_t bin_idx) const {
+    return bin_may_use_trie(bin_idx) && !table.get_bin(bin_idx).empty() &&
+           table.get_bin(bin_idx).list_length() == 0;
+  }
 
-  cpp::array<FreeList, NUM_SMALL_SIZES> small_lists;
-  FreeTrie large_trie;
+  LIBC_INLINE BlockRef pop_from_bin(size_t bin_idx, size_t size);
+  LIBC_INLINE BlockRef remove_first_fit_from_bin(size_t bin_idx, size_t size);
+
   Table table;
 };
 
@@ -87,58 +115,162 @@ template <typename CONFIG>
 LIBC_INLINE void TLSFFreeStoreImpl<CONFIG>::insert(BlockRef block) {
   if (too_small(block))
     return;
-  if (is_small(block))
-    small_list(block).push(block);
-  else
-    large_trie.push(block);
+  size_t bin_idx = table.size_to_bit_index(block.outer_size());
+  MixedFreeList &bin = table.get_bin(bin_idx);
+
+  if (LIBC_UNLIKELY(bin_is_using_trie(bin_idx))) {
+    cpp::array<size_t, 2> range = table.get_bin_range(bin_idx);
+    FreeTrie trie = bin.load_trie(range[0], range[1]);
+    trie.push(block);
+    bin.store_trie(trie);
+  } else if (LIBC_UNLIKELY(bin_may_use_trie(bin_idx) &&
+                           bin.list_length() >= UNIT_MASK)) {
+    FreeList list = bin.load_list();
+    cpp::array<size_t, 2> range = table.get_bin_range(bin_idx);
+    FreeTrie trie{FreeTrie::SizeRange(range[0], range[1])};
+    while (!list.empty()) {
+      BlockRef b = list.front();
+      list.pop();
+      trie.push(b);
+    }
+    trie.push(block);
+    bin.store_trie(trie);
+  } else {
+    size_t current_len = bin.list_length();
+    FreeList list = bin.load_list();
+    list.push(block);
+    bin.store_list(list, current_len + 1);
+  }
+
+  table.set_bit(bin_idx);
 }
 
 template <typename CONFIG>
 LIBC_INLINE void TLSFFreeStoreImpl<CONFIG>::remove(BlockRef block) {
   if (too_small(block))
     return;
-  if (is_small(block)) {
-    small_list(block).remove(
-        reinterpret_cast<FreeList::Node *>(block.usable_space()));
+  size_t bin_idx = table.size_to_bit_index(block.outer_size());
+  MixedFreeList &bin = table.get_bin(bin_idx);
+  if (bin.empty())
+    return;
+
+  if (LIBC_UNLIKELY(bin_is_using_trie(bin_idx))) {
+    cpp::array<size_t, 2> range = table.get_bin_range(bin_idx);
+    FreeTrie trie = bin.load_trie(range[0], range[1]);
+    trie.remove(reinterpret_cast<FreeTrie::Node *>(block.usable_space()));
+    bin.store_trie(trie);
+    if (trie.empty())
+      table.clear_bit(bin_idx);
   } else {
-    large_trie.remove(reinterpret_cast<FreeTrie::Node *>(block.usable_space()));
+    size_t current_len = bin.list_length();
+    FreeList list = bin.load_list();
+    list.remove(reinterpret_cast<FreeList::Node *>(block.usable_space()));
+    if (list.empty()) {
+      bin.store_list(list, 0);
+      table.clear_bit(bin_idx);
+    } else {
+      bin.store_list(list, current_len - 1);
+    }
   }
 }
 
 template <typename CONFIG>
-LIBC_INLINE BlockRef TLSFFreeStoreImpl<CONFIG>::remove_best_fit(size_t size) {
-  if (FreeList *list = find_best_small_fit(size)) {
-    BlockRef block = list->front();
-    list->pop();
-    return block;
+LIBC_INLINE BlockRef
+TLSFFreeStoreImpl<CONFIG>::pop_from_bin(size_t bin_idx, size_t size) {
+  MixedFreeList &bin = table.get_bin(bin_idx);
+  if (bin.empty())
+    return BlockRef();
+
+  if (bin_is_using_trie(bin_idx)) {
+    cpp::array<size_t, 2> range = table.get_bin_range(bin_idx);
+    FreeTrie trie = bin.load_trie(range[0], range[1]);
+    if (FreeTrie::Node *best_fit = trie.find_best_fit(size)) {
+      BlockRef block = best_fit->block();
+      trie.remove(best_fit);
+      bin.store_trie(trie);
+      if (trie.empty())
+        table.clear_bit(bin_idx);
+      return block;
+    }
+    return BlockRef();
   }
-  if (FreeTrie::Node *best_fit = large_trie.find_best_fit(size)) {
-    BlockRef block = best_fit->block();
-    large_trie.remove(best_fit);
+
+  size_t current_len = bin.list_length();
+  FreeList list = bin.load_list();
+  if (BlockRef block = list.pop_block()) {
+    if (list.empty()) {
+      bin.store_list(list, 0);
+      table.clear_bit(bin_idx);
+    } else {
+      bin.store_list(list, current_len - 1);
+    }
     return block;
   }
   return BlockRef();
 }
 
 template <typename CONFIG>
-LIBC_INLINE FreeList &TLSFFreeStoreImpl<CONFIG>::small_list(BlockRef block) {
-  LIBC_ASSERT(is_small(block) && "only legal for small blocks");
-  return small_lists[(block.outer_size() - MIN_OUTER_SIZE) /
-                     BlockRef::MIN_ALIGN];
+LIBC_INLINE BlockRef
+TLSFFreeStoreImpl<CONFIG>::remove_first_fit_from_bin(size_t bin_idx,
+                                                      size_t size) {
+  MixedFreeList &bin = table.get_bin(bin_idx);
+  if (bin.empty())
+    return BlockRef();
+
+  if (bin_is_using_trie(bin_idx)) {
+    cpp::array<size_t, 2> range = table.get_bin_range(bin_idx);
+    FreeTrie trie = bin.load_trie(range[0], range[1]);
+    if (FreeTrie::Node *best_fit = trie.find_best_fit(size)) {
+      BlockRef block = best_fit->block();
+      trie.remove(best_fit);
+      bin.store_trie(trie);
+      if (trie.empty())
+        table.clear_bit(bin_idx);
+      return block;
+    }
+    return BlockRef();
+  }
+
+  size_t current_len = bin.list_length();
+  FreeList list = bin.load_list();
+  if (BlockRef block = list.remove_first_fit(size)) {
+    if (list.empty()) {
+      bin.store_list(list, 0);
+      table.clear_bit(bin_idx);
+    } else {
+      bin.store_list(list, current_len - 1);
+    }
+    return block;
+  }
+  return BlockRef();
 }
 
 template <typename CONFIG>
-LIBC_INLINE FreeList *
-TLSFFreeStoreImpl<CONFIG>::find_best_small_fit(size_t size) {
-  for (FreeList &list : small_lists)
-    if (!list.empty() && list.size() >= size)
-      return &list;
-  return nullptr;
+LIBC_INLINE BlockRef TLSFFreeStoreImpl<CONFIG>::remove_best_fit(size_t size) {
+  size_t bit_index = table.size_to_bit_index(size);
+
+  // Path 1: Overflow bin
+  if (LIBC_UNLIKELY(bit_index >= Table::TOTAL_BITS - 1)) {
+    size_t overflow_idx = Table::TOTAL_BITS - 1;
+    return remove_first_fit_from_bin(overflow_idx, size);
+  }
+
+  // Path 2: Guaranteed fit in oversized bin (Fast Path O(1))
+  size_t oversized_bit = table.find_first_bit_set_after(bit_index);
+  if (oversized_bit < Table::TOTAL_BITS) {
+    return pop_from_bin(oversized_bit, size);
+  }
+
+  // Path 3: Exact fit bin (Fallback Slow Path)
+  if (table.get_bit(bit_index)) {
+    if (BlockRef block = remove_first_fit_from_bin(bit_index, size))
+      return block;
+  }
+
+  return BlockRef();
 }
 
-using DefaultFreeStoreConfig =
-    TLSFFreeStoreConfig<BlockRef::MIN_ALIGN, 2, 2, 2>;
-using FreeStore = TLSFFreeStoreImpl<DefaultFreeStoreConfig>;
+using FreeStore = TLSFFreeStoreImpl<>;
 
 } // namespace LIBC_NAMESPACE_DECL
 

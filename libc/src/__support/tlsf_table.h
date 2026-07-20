@@ -118,6 +118,33 @@ public:
     return index < TOTAL_BITS ? index : TOTAL_BITS - 1;
   }
 
+  LIBC_INLINE static constexpr cpp::array<size_t, 2>
+  get_bin_range(size_t bit_index) {
+    if (bit_index >= TOTAL_BITS)
+      return {0, 0};
+
+    if (bit_index == TOTAL_BITS - 1) {
+      cpp::array<size_t, 2> prev = get_bin_range(bit_index - 1);
+      return {prev[1] + 1, ~size_t(0)};
+    }
+
+    if (bit_index < EXP_BASE) {
+      size_t min_s = bit_index << UNIT_SIZE_LOG2;
+      size_t max_s = ((bit_index + 1) << UNIT_SIZE_LOG2) - 1;
+      return {min_s, max_s};
+    }
+
+    size_t idx_offset = bit_index - EXP_BASE;
+    size_t exp_level = idx_offset >> NUM_STEP_BITS;
+    size_t step_in_octave = idx_offset & (NUM_STEPS - 1);
+
+    size_t k = static_cast<size_t>(UNIT_SIZE_LOG2 + EXP_BASE_LOG2) + exp_level;
+    size_t step_size = size_t(1) << (k - NUM_STEP_BITS);
+    size_t min_s = (size_t(1) << k) + step_in_octave * step_size;
+    size_t max_s = min_s + step_size - 1;
+    return {min_s, max_s};
+  }
+
   LIBC_INLINE T &get_bin(size_t bit_index) { return bins[bit_index]; }
 
   LIBC_INLINE const T &get_bin(size_t bit_index) const {

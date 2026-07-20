@@ -79,6 +79,31 @@ public:
   /// This allows pushing derived node types with additional data.
   void push(Node *node);
 
+  /// Pop the first node from the list and return its block.
+  LIBC_INLINE BlockRef pop_block() {
+    if (!begin_)
+      return BlockRef();
+    BlockRef block = begin_->block();
+    pop();
+    return block;
+  }
+
+  /// Remove the first node in the list with size >= requested size and return its block.
+  LIBC_INLINE BlockRef remove_first_fit(size_t size) {
+    if (!begin_)
+      return BlockRef();
+    Node *cur = begin_;
+    do {
+      if (cur->size() >= size) {
+        BlockRef block = cur->block();
+        remove(cur);
+        return block;
+      }
+      cur = cur->next;
+    } while (cur != begin_);
+    return BlockRef();
+  }
+
   /// Pop the first node from the list.
   LIBC_INLINE void pop() { remove(begin_); }
 

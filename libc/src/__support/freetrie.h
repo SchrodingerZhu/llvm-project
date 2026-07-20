@@ -89,6 +89,12 @@ public:
 
   LIBC_INLINE constexpr FreeTrie() : FreeTrie(SizeRange{0, 0}) {}
   LIBC_INLINE constexpr FreeTrie(SizeRange range) : range(range) {}
+  LIBC_INLINE constexpr FreeTrie(Node *root, SizeRange range)
+      : root(root), range(range) {}
+
+  LIBC_INLINE void store_root(void *storage) const {
+    new (storage) Node *{root};
+  }
 
   /// Sets the range of possible block sizes. This can only be called when the
   /// trie is empty.
