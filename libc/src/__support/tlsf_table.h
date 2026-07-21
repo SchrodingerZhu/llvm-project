@@ -14,6 +14,7 @@
 #ifndef LLVM_LIBC_SRC___SUPPORT_TLSF_TABLE_H
 #define LLVM_LIBC_SRC___SUPPORT_TLSF_TABLE_H
 
+#include "freetrie.h"
 #include "hdr/stdint_proxy.h"
 #include "hdr/types/size_t.h"
 #include "src/__support/CPP/array.h"
@@ -118,20 +119,21 @@ public:
     return index < TOTAL_BITS ? index : TOTAL_BITS - 1;
   }
 
-  LIBC_INLINE static constexpr cpp::array<size_t, 2>
+  LIBC_INLINE static constexpr FreeTrie::SizeRange
   get_bin_range(size_t bit_index) {
     if (bit_index >= TOTAL_BITS)
       return {0, 0};
 
     if (bit_index == TOTAL_BITS - 1) {
-      cpp::array<size_t, 2> prev = get_bin_range(bit_index - 1);
-      return {prev[1] + 1, ~size_t(0)};
+      FreeTrie::SizeRange prev = get_bin_range(bit_index - 1);
+      size_t min_s = prev.min + prev.width;
+      size_t width = size_t(1) << (cpp::numeric_limits<size_t>::digits - 1);
+      return {min_s, width};
     }
 
     if (bit_index < EXP_BASE) {
       size_t min_s = bit_index << UNIT_SIZE_LOG2;
-      size_t max_s = ((bit_index + 1) << UNIT_SIZE_LOG2) - 1;
-      return {min_s, max_s};
+      return {min_s, UNIT_SIZE};
     }
 
     size_t idx_offset = bit_index - EXP_BASE;
@@ -141,8 +143,7 @@ public:
     size_t k = static_cast<size_t>(UNIT_SIZE_LOG2 + EXP_BASE_LOG2) + exp_level;
     size_t step_size = size_t(1) << (k - NUM_STEP_BITS);
     size_t min_s = (size_t(1) << k) + step_in_octave * step_size;
-    size_t max_s = min_s + step_size - 1;
-    return {min_s, max_s};
+    return {min_s, step_size};
   }
 
   LIBC_INLINE T &get_bin(size_t bit_index) { return bins[bit_index]; }

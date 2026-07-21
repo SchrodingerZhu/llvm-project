@@ -68,9 +68,9 @@ private:
     LIBC_INLINE FreeList load_list() const {
       return {cpp::bit_cast<FreeList::Node *>(payload & ~UNIT_MASK)};
     }
-    LIBC_INLINE FreeTrie load_trie(size_t min_size, size_t max_size) const {
+    LIBC_INLINE FreeTrie load_trie(FreeTrie::SizeRange outer_range) const {
       return {cpp::bit_cast<FreeTrie::Node *>(payload & ~UNIT_MASK),
-              {min_size, max_size}};
+              {outer_range.min - BlockRef::HEADER_SIZE, outer_range.width}};
     }
     LIBC_INLINE void store_list(FreeList list, size_t length) {
       payload = cpp::bit_cast<uintptr_t>(list.begin()) | length;
@@ -95,8 +95,8 @@ private:
   }
 
   LIBC_INLINE static bool bin_may_use_trie(size_t bin_idx) {
-    static constexpr size_t MIN_BIN_IDX_WITH_TRIE =
-        Table::size_to_bit_index(MIN_LARGE_OUTER_SIZE);
+    static constexpr size_t MIN_BIN_IDX_WITH_TRIE = Table::size_to_bit_index(
+        cpp::max(MIN_LARGE_OUTER_SIZE, CONFIG::FREETRIE_THRESHOLD));
     return bin_idx >= MIN_BIN_IDX_WITH_TRIE;
   }
 
@@ -118,20 +118,16 @@ LIBC_INLINE void TLSFFreeStoreImpl<CONFIG>::insert(BlockRef block) {
   size_t bin_idx = table.size_to_bit_index(block.outer_size());
   MixedFreeList &bin = table.get_bin(bin_idx);
 
-  if (LIBC_UNLIKELY(bin_is_using_trie(bin_idx))) {
-    cpp::array<size_t, 2> range = table.get_bin_range(bin_idx);
-    FreeTrie trie = bin.load_trie(range[0], range[1]);
-    trie.push(block);
-    bin.store_trie(trie);
-  } else if (LIBC_UNLIKELY(bin_may_use_trie(bin_idx) &&
-                           bin.list_length() >= UNIT_MASK)) {
-    FreeList list = bin.load_list();
-    cpp::array<size_t, 2> range = table.get_bin_range(bin_idx);
-    FreeTrie trie{FreeTrie::SizeRange(range[0], range[1])};
-    while (!list.empty()) {
-      BlockRef b = list.front();
-      list.pop();
-      trie.push(b);
+  if (bin_may_use_trie(bin_idx)) {
+    FreeTrie::SizeRange range = table.get_bin_range(bin_idx);
+    FreeTrie trie = bin.load_trie(range);
+    if (!bin_is_using_trie(bin_idx)) {
+      FreeList list = bin.load_list();
+      while (!list.empty()) {
+        BlockRef b = list.front();
+        list.pop();
+        trie.push(b);
+      }
     }
     trie.push(block);
     bin.store_trie(trie);
@@ -155,8 +151,8 @@ LIBC_INLINE void TLSFFreeStoreImpl<CONFIG>::remove(BlockRef block) {
     return;
 
   if (LIBC_UNLIKELY(bin_is_using_trie(bin_idx))) {
-    cpp::array<size_t, 2> range = table.get_bin_range(bin_idx);
-    FreeTrie trie = bin.load_trie(range[0], range[1]);
+    FreeTrie::SizeRange range = table.get_bin_range(bin_idx);
+    FreeTrie trie = bin.load_trie(range);
     trie.remove(reinterpret_cast<FreeTrie::Node *>(block.usable_space()));
     bin.store_trie(trie);
     if (trie.empty())
@@ -182,8 +178,8 @@ TLSFFreeStoreImpl<CONFIG>::pop_from_bin(size_t bin_idx, size_t size) {
     return BlockRef();
 
   if (bin_is_using_trie(bin_idx)) {
-    cpp::array<size_t, 2> range = table.get_bin_range(bin_idx);
-    FreeTrie trie = bin.load_trie(range[0], range[1]);
+    FreeTrie::SizeRange range = table.get_bin_range(bin_idx);
+    FreeTrie trie = bin.load_trie(range);
     if (FreeTrie::Node *best_fit = trie.find_best_fit(size)) {
       BlockRef block = best_fit->block();
       trie.remove(best_fit);
@@ -218,8 +214,8 @@ TLSFFreeStoreImpl<CONFIG>::remove_first_fit_from_bin(size_t bin_idx,
     return BlockRef();
 
   if (bin_is_using_trie(bin_idx)) {
-    cpp::array<size_t, 2> range = table.get_bin_range(bin_idx);
-    FreeTrie trie = bin.load_trie(range[0], range[1]);
+    FreeTrie::SizeRange range = table.get_bin_range(bin_idx);
+    FreeTrie trie = bin.load_trie(range);
     if (FreeTrie::Node *best_fit = trie.find_best_fit(size)) {
       BlockRef block = best_fit->block();
       trie.remove(best_fit);
