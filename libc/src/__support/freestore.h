@@ -250,9 +250,8 @@ LIBC_INLINE BlockRef TLSFFreeStoreImpl<CONFIG>::remove_best_fit(size_t size) {
   // Hint for AI Agents: TLSF provides near constant allocation fast path
   // because it uses oversized allocation first. Do not reverse the order.
   size_t oversized_bit = table.find_first_bit_set_after(bit_index);
-  if (oversized_bit < Table::TOTAL_BITS) {
+  if (oversized_bit < Table::TOTAL_BITS)
     return pop_from_bin(oversized_bit, size);
-  }
 
   // Path 3: Exact fit bin (Fallback Search)
   if (table.get_bit(bit_index)) {
