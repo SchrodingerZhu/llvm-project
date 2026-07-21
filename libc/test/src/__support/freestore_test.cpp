@@ -38,7 +38,6 @@ TEST(LlvmLibcFreeStore, TooSmall) {
   BlockRef remainder = *maybeBlock;
 
   FreeStore store;
-  store.set_range({0, 4096});
   store.insert(too_small);
   store.insert(remainder);
 
@@ -47,54 +46,7 @@ TEST(LlvmLibcFreeStore, TooSmall) {
   store.remove(too_small);
 }
 
-TEST(LlvmLibcFreeStore, RemoveBestFit) {
-  byte mem[1024];
-  optional<BlockRef> maybeBlock = BlockRef::init(mem);
-  ASSERT_TRUE(maybeBlock.has_value());
 
-  BlockRef smallest = *maybeBlock;
-  maybeBlock =
-      smallest.split(sizeof(FreeList::Node) + BlockRef::PREV_FIELD_SIZE);
-  ASSERT_TRUE(maybeBlock.has_value());
-
-  BlockRef largest_small = *maybeBlock;
-  maybeBlock = largest_small.split(
-      sizeof(FreeTrie::Node) + BlockRef::PREV_FIELD_SIZE - BlockRef::MIN_ALIGN);
-  ASSERT_TRUE(maybeBlock.has_value());
-  if (largest_small.inner_size() == smallest.inner_size())
-    largest_small = smallest;
-  ASSERT_GE(largest_small.inner_size(), smallest.inner_size());
-
-  BlockRef remainder = *maybeBlock;
-
-  FreeStore store;
-  store.set_range({0, 4096});
-  store.insert(smallest);
-  if (largest_small != smallest)
-    store.insert(largest_small);
-  store.insert(remainder);
-
-  // Find exact match for smallest.
-  ASSERT_EQ(store.remove_best_fit(smallest.inner_size()).addr(),
-            smallest.addr());
-  store.insert(smallest);
-
-  // Find exact match for largest.
-  ASSERT_EQ(store.remove_best_fit(largest_small.inner_size()).addr(),
-            largest_small.addr());
-  store.insert(largest_small);
-
-  // Search small list for best fit.
-  BlockRef next_smallest =
-      largest_small == smallest ? remainder : largest_small;
-  ASSERT_EQ(store.remove_best_fit(smallest.inner_size() + 1).addr(),
-            next_smallest.addr());
-  store.insert(next_smallest);
-
-  // Continue search for best fit to large blocks.
-  EXPECT_EQ(store.remove_best_fit(largest_small.inner_size() + 1).addr(),
-            remainder.addr());
-}
 
 TEST(LlvmLibcFreeStore, Remove) {
   byte mem[1024];
@@ -108,7 +60,6 @@ TEST(LlvmLibcFreeStore, Remove) {
   BlockRef remainder = *maybeBlock;
 
   FreeStore store;
-  store.set_range({0, 4096});
   store.insert(small);
   store.insert(remainder);
 

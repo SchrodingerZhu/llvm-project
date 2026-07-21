@@ -24,15 +24,19 @@ namespace LIBC_NAMESPACE_DECL {
 
 /// Configuration for TLSFFreeStore.
 struct DefaultTLSFFreeStoreConfig {
+  // TLSF Table configuration.
   static constexpr size_t UNIT_SIZE = BlockRef::MIN_ALIGN;
   static constexpr size_t STEP_SIZE_BITS = 3;
   static constexpr size_t NUM_STEP_BITS = 2;
   static constexpr size_t NUM_TABLE_ENTRIES = 2;
+  // Threshold for using trie.
   static constexpr size_t FREETRIE_THRESHOLD = 256;
 };
 
-/// A best-fit store of variously-sized free blocks. Blocks can be inserted and
-/// removed in logarithmic time.
+/// A freestore with mixed stategies.
+/// The memory space is first partitioned into a two-level segrate table;
+/// where each table works as a bin for free blocks in a size range. The
+/// bin is further managed by either a freelist or a freetrie.
 template <typename CONFIG = DefaultTLSFFreeStoreConfig>
 class TLSFFreeStoreImpl {
   friend class FreeListHeap;
@@ -41,8 +45,6 @@ public:
   LIBC_INLINE TLSFFreeStoreImpl() = default;
   TLSFFreeStoreImpl(const TLSFFreeStoreImpl &other) = delete;
   TLSFFreeStoreImpl &operator=(const TLSFFreeStoreImpl &other) = delete;
-
-  LIBC_INLINE void set_range(FreeTrie::SizeRange) {}
 
   /// Insert a free block. If the block is too small to be tracked, nothing
   /// happens.
@@ -59,6 +61,22 @@ public:
 private:
   static constexpr uintptr_t UNIT_MASK = CONFIG::UNIT_SIZE - 1;
 
+  // A slot in table: it can either be the root pointer of a trie or a doubly
+  // linked list.
+  // - FreeTrie: lower bits up to minimal alignment is always zero; the pointer
+  //             is not null.
+  // - FreeList:
+  //   * if the list is empty, then the pointer is null;
+  //   * otherwise, the lower bits of the head pointer records the list length.
+  //
+  // Only bins above the FREETRIE_THRESHOLD may use a trie. Moreover, every bin
+  // is initially managed by a freelist. The list grows up to the UNIT_MASK
+  // threshold. After that it will be promoted to a trie.
+
+  static_assert(
+      CONFIG::FREETRIE_THRESHOLD >= sizeof(FreeTrie::Node),
+      "Trie node must fit inside the range covered by freelist payload");
+
   struct MixedFreeList {
     uintptr_t payload;
 
@@ -68,12 +86,9 @@ private:
     LIBC_INLINE FreeList load_list() const {
       return {cpp::bit_cast<FreeList::Node *>(payload & ~UNIT_MASK)};
     }
-    LIBC_INLINE FreeTrie load_trie(FreeTrie::SizeRange outer_range) const {
-      size_t min_inner = outer_range.min >= BlockRef::HEADER_SIZE
-                             ? outer_range.min - BlockRef::HEADER_SIZE
-                             : 0;
-      return {cpp::bit_cast<FreeTrie::Node *>(payload & ~UNIT_MASK),
-              {min_inner, outer_range.width}};
+    LIBC_INLINE FreeTrie load_trie(FreeTrie::SizeRange range) const {
+      return {cpp::bit_cast<FreeTrie::Node *>(payload),
+              {range.min, range.width}};
     }
     LIBC_INLINE void store_list(FreeList list, size_t length) {
       payload = cpp::bit_cast<uintptr_t>(list.begin()) | length;
@@ -98,8 +113,8 @@ private:
   }
 
   LIBC_INLINE static bool bin_may_use_trie(size_t bin_idx) {
-    static constexpr size_t MIN_BIN_IDX_WITH_TRIE = Table::size_to_bit_index(
-        cpp::max(MIN_LARGE_OUTER_SIZE, CONFIG::FREETRIE_THRESHOLD));
+    static constexpr size_t MIN_BIN_IDX_WITH_TRIE =
+        Table::size_to_bit_index(CONFIG::FREETRIE_THRESHOLD);
     return bin_idx >= MIN_BIN_IDX_WITH_TRIE;
   }
 
@@ -120,7 +135,7 @@ template <typename CONFIG>
 LIBC_INLINE void TLSFFreeStoreImpl<CONFIG>::insert(BlockRef block) {
   if (too_small(block))
     return;
-  size_t bin_idx = table.size_to_bit_index(block.outer_size());
+  size_t bin_idx = table.size_to_bit_index(block.inner_size());
   MixedFreeList &bin = table.get_bin(bin_idx);
 
   if (bin_may_use_trie(bin_idx)) {
@@ -150,7 +165,7 @@ template <typename CONFIG>
 LIBC_INLINE void TLSFFreeStoreImpl<CONFIG>::remove(BlockRef block) {
   if (too_small(block))
     return;
-  size_t bin_idx = table.size_to_bit_index(block.outer_size());
+  size_t bin_idx = table.size_to_bit_index(block.inner_size());
   MixedFreeList &bin = table.get_bin(bin_idx);
   if (bin.empty())
     return;
@@ -245,7 +260,7 @@ LIBC_INLINE BlockRef TLSFFreeStoreImpl<CONFIG>::remove_first_fit_from_bin(
 
 template <typename CONFIG>
 LIBC_INLINE BlockRef TLSFFreeStoreImpl<CONFIG>::remove_best_fit(size_t size) {
-  size_t bit_index = table.size_to_bit_index(size + BlockRef::HEADER_SIZE);
+  size_t bit_index = table.size_to_bit_index(size);
 
   // Path 1: Overflow bin
   if (LIBC_UNLIKELY(bit_index >= Table::TOTAL_BITS - 1)) {
