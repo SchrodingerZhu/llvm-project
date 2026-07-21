@@ -69,8 +69,11 @@ private:
       return {cpp::bit_cast<FreeList::Node *>(payload & ~UNIT_MASK)};
     }
     LIBC_INLINE FreeTrie load_trie(FreeTrie::SizeRange outer_range) const {
+      size_t min_inner = outer_range.min >= BlockRef::HEADER_SIZE
+                             ? outer_range.min - BlockRef::HEADER_SIZE
+                             : 0;
       return {cpp::bit_cast<FreeTrie::Node *>(payload & ~UNIT_MASK),
-              {outer_range.min - BlockRef::HEADER_SIZE, outer_range.width}};
+              {min_inner, outer_range.width}};
     }
     LIBC_INLINE void store_list(FreeList list, size_t length) {
       payload = cpp::bit_cast<uintptr_t>(list.begin()) | length;
