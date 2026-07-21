@@ -108,6 +108,7 @@ private:
            table.get_bin(bin_idx).list_length() == 0;
   }
 
+  template <bool REMOVE_ROOT = false>
   LIBC_INLINE BlockRef remove_from_trie_bin(size_t bin_idx, size_t size);
   LIBC_INLINE BlockRef pop_from_bin(size_t bin_idx, size_t size);
   LIBC_INLINE BlockRef remove_first_fit_from_bin(size_t bin_idx, size_t size);
@@ -175,14 +176,17 @@ LIBC_INLINE void TLSFFreeStoreImpl<CONFIG>::remove(BlockRef block) {
 }
 
 template <typename CONFIG>
+template <bool REMOVE_ROOT>
 LIBC_INLINE BlockRef
 TLSFFreeStoreImpl<CONFIG>::remove_from_trie_bin(size_t bin_idx, size_t size) {
   MixedFreeList &bin = table.get_bin(bin_idx);
   FreeTrie::SizeRange range = table.get_bin_range(bin_idx);
   FreeTrie trie = bin.load_trie(range);
-  if (FreeTrie::Node *best_fit = trie.find_best_fit(size)) {
-    BlockRef block = best_fit->block();
-    trie.remove(best_fit);
+  FreeTrie::Node *target_node =
+      REMOVE_ROOT ? trie.get_root() : trie.find_best_fit(size);
+  if (target_node) {
+    BlockRef block = target_node->block();
+    trie.remove(target_node);
     bin.store_trie(trie);
     if (trie.empty())
       table.clear_bit(bin_idx);
@@ -199,7 +203,7 @@ LIBC_INLINE BlockRef TLSFFreeStoreImpl<CONFIG>::pop_from_bin(size_t bin_idx,
     return BlockRef();
 
   if (bin_is_using_trie(bin_idx))
-    return remove_from_trie_bin(bin_idx, size);
+    return remove_from_trie_bin</*REMOVE_ROOT=*/true>(bin_idx, size);
 
   size_t current_len = bin.list_length();
   FreeList list = bin.load_list();
@@ -223,7 +227,7 @@ LIBC_INLINE BlockRef TLSFFreeStoreImpl<CONFIG>::remove_first_fit_from_bin(
     return BlockRef();
 
   if (bin_is_using_trie(bin_idx))
-    return remove_from_trie_bin(bin_idx, size);
+    return remove_from_trie_bin</*REMOVE_ROOT=*/false>(bin_idx, size);
 
   size_t current_len = bin.list_length();
   FreeList list = bin.load_list();
