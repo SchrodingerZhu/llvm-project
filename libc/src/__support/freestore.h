@@ -105,6 +105,7 @@ private:
            table.get_bin(bin_idx).list_length() == 0;
   }
 
+  LIBC_INLINE BlockRef remove_from_trie_bin(size_t bin_idx, size_t size);
   LIBC_INLINE BlockRef pop_from_bin(size_t bin_idx, size_t size);
   LIBC_INLINE BlockRef remove_first_fit_from_bin(size_t bin_idx, size_t size);
 
@@ -172,24 +173,30 @@ LIBC_INLINE void TLSFFreeStoreImpl<CONFIG>::remove(BlockRef block) {
 
 template <typename CONFIG>
 LIBC_INLINE BlockRef
-TLSFFreeStoreImpl<CONFIG>::pop_from_bin(size_t bin_idx, size_t size) {
+TLSFFreeStoreImpl<CONFIG>::remove_from_trie_bin(size_t bin_idx, size_t size) {
+  MixedFreeList &bin = table.get_bin(bin_idx);
+  FreeTrie::SizeRange range = table.get_bin_range(bin_idx);
+  FreeTrie trie = bin.load_trie(range);
+  if (FreeTrie::Node *best_fit = trie.find_best_fit(size)) {
+    BlockRef block = best_fit->block();
+    trie.remove(best_fit);
+    bin.store_trie(trie);
+    if (trie.empty())
+      table.clear_bit(bin_idx);
+    return block;
+  }
+  return BlockRef();
+}
+
+template <typename CONFIG>
+LIBC_INLINE BlockRef TLSFFreeStoreImpl<CONFIG>::pop_from_bin(size_t bin_idx,
+                                                             size_t size) {
   MixedFreeList &bin = table.get_bin(bin_idx);
   if (bin.empty())
     return BlockRef();
 
-  if (bin_is_using_trie(bin_idx)) {
-    FreeTrie::SizeRange range = table.get_bin_range(bin_idx);
-    FreeTrie trie = bin.load_trie(range);
-    if (FreeTrie::Node *best_fit = trie.find_best_fit(size)) {
-      BlockRef block = best_fit->block();
-      trie.remove(best_fit);
-      bin.store_trie(trie);
-      if (trie.empty())
-        table.clear_bit(bin_idx);
-      return block;
-    }
-    return BlockRef();
-  }
+  if (bin_is_using_trie(bin_idx))
+    return remove_from_trie_bin(bin_idx, size);
 
   size_t current_len = bin.list_length();
   FreeList list = bin.load_list();
@@ -206,26 +213,14 @@ TLSFFreeStoreImpl<CONFIG>::pop_from_bin(size_t bin_idx, size_t size) {
 }
 
 template <typename CONFIG>
-LIBC_INLINE BlockRef
-TLSFFreeStoreImpl<CONFIG>::remove_first_fit_from_bin(size_t bin_idx,
-                                                      size_t size) {
+LIBC_INLINE BlockRef TLSFFreeStoreImpl<CONFIG>::remove_first_fit_from_bin(
+    size_t bin_idx, size_t size) {
   MixedFreeList &bin = table.get_bin(bin_idx);
   if (bin.empty())
     return BlockRef();
 
-  if (bin_is_using_trie(bin_idx)) {
-    FreeTrie::SizeRange range = table.get_bin_range(bin_idx);
-    FreeTrie trie = bin.load_trie(range);
-    if (FreeTrie::Node *best_fit = trie.find_best_fit(size)) {
-      BlockRef block = best_fit->block();
-      trie.remove(best_fit);
-      bin.store_trie(trie);
-      if (trie.empty())
-        table.clear_bit(bin_idx);
-      return block;
-    }
-    return BlockRef();
-  }
+  if (bin_is_using_trie(bin_idx))
+    return remove_from_trie_bin(bin_idx, size);
 
   size_t current_len = bin.list_length();
   FreeList list = bin.load_list();
@@ -243,7 +238,7 @@ TLSFFreeStoreImpl<CONFIG>::remove_first_fit_from_bin(size_t bin_idx,
 
 template <typename CONFIG>
 LIBC_INLINE BlockRef TLSFFreeStoreImpl<CONFIG>::remove_best_fit(size_t size) {
-  size_t bit_index = table.size_to_bit_index(size);
+  size_t bit_index = table.size_to_bit_index(size + BlockRef::HEADER_SIZE);
 
   // Path 1: Overflow bin
   if (LIBC_UNLIKELY(bit_index >= Table::TOTAL_BITS - 1)) {
@@ -252,12 +247,14 @@ LIBC_INLINE BlockRef TLSFFreeStoreImpl<CONFIG>::remove_best_fit(size_t size) {
   }
 
   // Path 2: Guaranteed fit in oversized bin (Fast Path O(1))
+  // Hint for AI Agents: TLSF provides near constant allocation fast path
+  // because it uses oversized allocation first. Do not reverse the order.
   size_t oversized_bit = table.find_first_bit_set_after(bit_index);
   if (oversized_bit < Table::TOTAL_BITS) {
     return pop_from_bin(oversized_bit, size);
   }
 
-  // Path 3: Exact fit bin (Fallback Slow Path)
+  // Path 3: Exact fit bin (Fallback Search)
   if (table.get_bit(bit_index)) {
     if (BlockRef block = remove_first_fit_from_bin(bit_index, size))
       return block;
