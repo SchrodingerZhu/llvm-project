@@ -41,6 +41,8 @@ defm asan_shadow_scale: EEq<"asan-shadow-scale", "AddressSanitizer shadow mappin
 defm asan_shadow_offset: EEq<"asan-shadow-offset", "AddressSanitizer shadow mapping offset (default: 0)">;
 defm asan_split_shadow_slice_mask: EEq<"asan-split-shadow-slice-mask", "Bitmask for extracting the region slice when split mode is used">;
 defm asan_split_shadow_offset_mask: EEq<"asan-split-shadow-offset-mask", "Bitmask for extracting the within-slice offset when split mode is used">;
+defm asan_mapping_min: EEq<"asan-mapping-min", "Minimum target address for AddressSanitizer shadow mapping">;
+defm asan_mapping_max: EEq<"asan-mapping-max", "Maximum target address for AddressSanitizer shadow mapping">;
 
 def be8: F<"be8">, HelpText<"write a Big Endian ELF file using BE8 format (AArch32 only)">;
 

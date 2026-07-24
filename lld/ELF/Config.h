@@ -305,8 +305,12 @@ struct Config {
   uint64_t asanShadowOffset = 0;
   uint64_t asanSplitShadowSliceMask = 0xf0000000ULL;
   uint64_t asanSplitShadowOffsetMask = 0x0fffffffULL;
+  uint64_t asanMappingMin = 0;
+  uint64_t asanMappingMax = ~0ULL;
 
   uint64_t getAsanShadowAddress(uint64_t addr) const {
+    if (addr < asanMappingMin || addr >= asanMappingMax)
+      return 0;
     if (asanShadowMode == AsanShadowMode::Split) {
       uint64_t top = addr & asanSplitShadowSliceMask;
       uint64_t bottom = (addr & asanSplitShadowOffsetMask) >> asanShadowScale;

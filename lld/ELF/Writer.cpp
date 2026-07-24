@@ -1467,6 +1467,23 @@ template <class ELFT> void Writer<ELFT>::fixupAsanShadowSections() {
       if (!isd)
         continue;
 
+      llvm::erase_if(isd->sections, [](InputSection *isec) {
+        return isec->name == ".shadow_spacer";
+      });
+
+      llvm::stable_sort(
+          isd->sections, [&](const InputSection *a, const InputSection *b) {
+            uint64_t vaA = (a->flags & SHF_LINK_ORDER) && a->getLinkOrderDep()
+                               ? ctx.arg.getAsanShadowAddress(
+                                     a->getLinkOrderDep()->getVA(0))
+                               : 0;
+            uint64_t vaB = (b->flags & SHF_LINK_ORDER) && b->getLinkOrderDep()
+                               ? ctx.arg.getAsanShadowAddress(
+                                     b->getLinkOrderDep()->getVA(0))
+                               : 0;
+            return vaA < vaB;
+          });
+
       SmallVector<InputSection *, 0> newSections;
       bool modified = false;
 
@@ -1474,23 +1491,25 @@ template <class ELFT> void Writer<ELFT>::fixupAsanShadowSections() {
         if ((isec->flags & SHF_LINK_ORDER) && isec->getLinkOrderDep()) {
           uint64_t targetVA = isec->getLinkOrderDep()->getVA(0);
           uint64_t reqShadowVA = ctx.arg.getAsanShadowAddress(targetVA);
-          uint64_t curShadowVA = sec->addr + currentOff;
-
-          if (reqShadowVA > curShadowVA) {
-            uint64_t delta = reqShadowVA - curShadowVA;
-            char *buf = ctx.bAlloc.Allocate<char>(delta);
-            memset(buf, 0, delta);
-            auto *spacer = make<InputSection>(
-                ctx.internalFile, ".shadow_spacer", SHT_PROGBITS, sec->flags,
-                /*addralign=*/1, /*entsize=*/0,
-                ArrayRef<uint8_t>((uint8_t *)buf, delta));
-            spacer->parent = sec;
-            spacer->outSecOff = currentOff;
-            newSections.push_back(spacer);
-            currentOff += delta;
-            modified = true;
+          if (reqShadowVA != 0) {
+            uint64_t nextVA = alignTo(sec->addr + currentOff, isec->addralign);
+            if (reqShadowVA > nextVA) {
+              uint64_t delta = reqShadowVA - nextVA;
+              char *buf = ctx.bAlloc.Allocate<char>(delta);
+              memset(buf, 0, delta);
+              auto *spacer = make<InputSection>(
+                  ctx.internalFile, ".shadow_spacer", SHT_PROGBITS, sec->flags,
+                  /*addralign=*/1, /*entsize=*/0,
+                  ArrayRef<uint8_t>((uint8_t *)buf, delta));
+              spacer->parent = sec;
+              spacer->outSecOff = currentOff;
+              newSections.push_back(spacer);
+              currentOff += delta;
+              modified = true;
+            }
           }
         }
+        currentOff = alignTo(currentOff, isec->addralign);
         isec->outSecOff = currentOff;
         newSections.push_back(isec);
         currentOff += isec->getSize();
@@ -1653,8 +1672,8 @@ template <class ELFT> void Writer<ELFT>::finalizeAddressDependentContent() {
                    << " does not converge";
         break;
       }
-    } else if (spilled) {
-      // Spilling can change relative section order.
+    } else if (changed) {
+      // Spilling or thunks can change relative section order or sizes.
       finalizeOrderDependentContent();
     }
     // If updateAllocSize reported errors (e.g. "unknown FDE size encoding" for

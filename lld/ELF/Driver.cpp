@@ -1392,6 +1392,10 @@ static void readConfigs(Ctx &ctx, opt::InputArgList &args) {
         args, OPT_asan_split_shadow_offset_mask, ~ctx.arg.asanSplitShadowSliceMask);
   else
     ctx.arg.asanSplitShadowOffsetMask = ~ctx.arg.asanSplitShadowSliceMask;
+  if (auto *arg = args.getLastArg(OPT_asan_mapping_min))
+    ctx.arg.asanMappingMin = args::getInteger(args, OPT_asan_mapping_min, 0ULL);
+  if (auto *arg = args.getLastArg(OPT_asan_mapping_max))
+    ctx.arg.asanMappingMax = args::getInteger(args, OPT_asan_mapping_max, ~0ULL);
   ctx.arg.memtagHeap = hasZOption(args, "memtag-heap");
   ctx.arg.memtagStack = hasZOption(args, "memtag-stack");
   ctx.arg.memtagAndroidNote = args.hasArg(OPT_android_memtag_note);
