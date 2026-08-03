@@ -117,6 +117,32 @@ append_list_if(MSVC /Zl ASAN_CFLAGS)
 
 set(ASAN_COMMON_DEFINITIONS "")
 
+if(COMPILER_RT_ASAN_BAREMETAL)
+  list(APPEND ASAN_COMMON_DEFINITIONS ASAN_BAREMETAL=1)
+  if(NOT COMPILER_RT_ASAN_SHADOW_OFFSET_CONST STREQUAL "")
+    list(APPEND ASAN_COMMON_DEFINITIONS ASAN_SHADOW_OFFSET_CONST=${COMPILER_RT_ASAN_SHADOW_OFFSET_CONST})
+  endif()
+  if(NOT COMPILER_RT_ASAN_MEMORY_PIVOT STREQUAL "")
+    list(APPEND ASAN_COMMON_DEFINITIONS ASAN_MEMORY_PIVOT=${COMPILER_RT_ASAN_MEMORY_PIVOT})
+  endif()
+  if(NOT COMPILER_RT_ASAN_PIVOT_MASK STREQUAL "")
+    list(APPEND ASAN_COMMON_DEFINITIONS ASAN_PIVOT_MASK=${COMPILER_RT_ASAN_PIVOT_MASK})
+  endif()
+  list(REMOVE_ITEM ASAN_SOURCES
+    asan_aix.cpp
+    asan_fuchsia.cpp
+    asan_interceptors.cpp
+    asan_interceptors_memintrinsics.cpp
+    asan_linux.cpp
+    asan_mac.cpp
+    asan_malloc_linux.cpp
+    asan_malloc_mac.cpp
+    asan_malloc_win.cpp
+    asan_posix.cpp
+    asan_win.cpp
+  )
+endif()
+
 append_rtti_flag(OFF ASAN_CFLAGS)
 
 # Silence warnings in system headers with MSVC.

@@ -330,6 +330,11 @@ option(COMPILER_RT_USE_ATOMIC_LIBRARY "Use compiler-rt atomic instead of libatom
 
 option(COMPILER_RT_PROFILE_BAREMETAL "Build minimal baremetal profile library" OFF)
 
+option(COMPILER_RT_ASAN_BAREMETAL "Build minimal baremetal AddressSanitizer library" OFF)
+set(COMPILER_RT_ASAN_SHADOW_OFFSET_CONST "" CACHE STRING "Constant shadow offset for baremetal ASan mapping")
+set(COMPILER_RT_ASAN_MEMORY_PIVOT "" CACHE STRING "Memory pivot boundary for baremetal ASan mapping")
+set(COMPILER_RT_ASAN_PIVOT_MASK "" CACHE STRING "Address mask for baremetal ASan pivoting")
+
 set(COMPILER_RT_BUILD_PROFILE_ROCM_DEFAULT OFF)
 if("${CMAKE_SYSTEM_NAME}" MATCHES "^(Linux|Windows)$" AND
    NOT COMPILER_RT_PROFILE_BAREMETAL)
