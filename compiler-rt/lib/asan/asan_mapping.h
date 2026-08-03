@@ -294,6 +294,29 @@ extern uptr kHighMemEnd, kMidMemBeg, kMidMemEnd;  // Initialized in __asan_init.
 
 #  if defined(__sparc__) && SANITIZER_WORDSIZE == 64
 #    include "asan_mapping_sparc64.h"
+#  elif defined(ASAN_MEMORY_PIVOT) && ASAN_MEMORY_PIVOT > 0
+#    ifndef ASAN_PIVOT_MASK
+#      define ASAN_PIVOT_MASK ~(uptr)0
+#    endif
+#    ifndef ASAN_LOWER_REGION_BASE
+#      define ASAN_LOWER_REGION_BASE 0x10000000ULL
+#    endif
+#    ifndef ASAN_UPPER_REGION_BASE
+#      define ASAN_UPPER_REGION_BASE 0x20000000ULL
+#    endif
+#    define MEM_TO_SHADOW(mem) \
+       ((uptr)(ASAN_SHADOW_OFFSET + (((sptr)((STRIP_MTE_TAG(mem)) & ASAN_PIVOT_MASK) - \
+               (sptr)(ASAN_MEMORY_PIVOT & ASAN_PIVOT_MASK)) >> ASAN_SHADOW_SCALE)))
+#    define SHADOW_TO_MEM(mem)                                               \
+       ((uptr)(((sptr)(mem) < (sptr)ASAN_SHADOW_OFFSET)                      \
+                   ? (ASAN_LOWER_REGION_BASE |                               \
+                      ((uptr)((sptr)(ASAN_MEMORY_PIVOT & ASAN_PIVOT_MASK) +  \
+                              (((sptr)(mem) - (sptr)ASAN_SHADOW_OFFSET)      \
+                               << ASAN_SHADOW_SCALE))))                      \
+                   : (ASAN_UPPER_REGION_BASE |                               \
+                      ((uptr)((sptr)(ASAN_MEMORY_PIVOT & ASAN_PIVOT_MASK) +  \
+                              (((sptr)(mem) - (sptr)ASAN_SHADOW_OFFSET)      \
+                               << ASAN_SHADOW_SCALE))))))
 #  else
 #    define MEM_TO_SHADOW(mem) \
       ((STRIP_MTE_TAG(mem) >> ASAN_SHADOW_SCALE) + (ASAN_SHADOW_OFFSET))
