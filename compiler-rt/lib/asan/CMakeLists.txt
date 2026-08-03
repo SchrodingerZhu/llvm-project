@@ -141,6 +141,9 @@ if(COMPILER_RT_ASAN_BAREMETAL)
     asan_posix.cpp
     asan_win.cpp
   )
+  list(APPEND ASAN_SOURCES
+    asan_baremetal.cpp
+  )
 endif()
 
 append_rtti_flag(OFF ASAN_CFLAGS)
