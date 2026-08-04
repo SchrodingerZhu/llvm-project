@@ -71,7 +71,7 @@ const char *MarkupSymbolizerTool::Demangle(const char *name) {
 // Fuchsia's logging infrastructure emits enough information about
 // process memory layout that a post-processing filter can do the
 // symbolization and pretty-print the markup.
-#if !SANITIZER_FUCHSIA
+#if !SANITIZER_FUCHSIA && !SANITIZER_BAREMETAL
 
 static bool ModulesEq(const LoadedModule &module,
                       const RenderedModule &renderedModule) {

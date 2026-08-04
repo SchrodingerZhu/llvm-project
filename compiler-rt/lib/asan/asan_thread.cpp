@@ -279,9 +279,9 @@ void AsanThread::Init(const InitOptions *options) {
           (void *)&local);
 }
 
-// Fuchsia doesn't use ThreadStart.
-// asan_fuchsia.c definies CreateMainThread and SetThreadStackAndTls.
-#if !SANITIZER_FUCHSIA
+// Fuchsia and Baremetal don't use POSIX ThreadStart or dynamic TLS discovery.
+// asan_fuchsia.cpp and asan_baremetal.cpp define CreateMainThread and SetThreadStackAndTls.
+#if !SANITIZER_FUCHSIA && !SANITIZER_BAREMETAL
 
 void AsanThread::ThreadStart(ThreadID os_id) {
   Init();
@@ -291,6 +291,7 @@ void AsanThread::ThreadStart(ThreadID os_id) {
     altstack_base_ = SetAlternateSignalStack();
 }
 
+#if !SANITIZER_BAREMETAL
 AsanThread *CreateMainThread() {
   AsanThread *main_thread = AsanThread::Create(
       /* parent_tid */ kMainTid,
@@ -299,6 +300,7 @@ AsanThread *CreateMainThread() {
   main_thread->ThreadStart(internal_getpid());
   return main_thread;
 }
+#endif
 
 // This implementation doesn't use the argument, which is just passed down
 // from the caller of Init (which see, above).  It's only there to support
@@ -317,7 +319,7 @@ void AsanThread::SetThreadStackAndTls(const InitOptions *options) {
   }
 }
 
-#endif  // !SANITIZER_FUCHSIA
+#endif  // !SANITIZER_FUCHSIA && !SANITIZER_BAREMETAL
 
 void AsanThread::ClearShadowForThreadStackAndTLS() {
   if (stack_top_ != stack_bottom_)

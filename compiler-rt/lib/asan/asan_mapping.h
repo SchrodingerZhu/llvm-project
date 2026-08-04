@@ -181,6 +181,7 @@
 
 #define ASAN_SHADOW_SCALE 3
 
+#if !defined(ASAN_SHADOW_OFFSET_CONST) && !defined(ASAN_SHADOW_OFFSET_DYNAMIC)
 #if SANITIZER_FUCHSIA
 #  define ASAN_SHADOW_OFFSET_DYNAMIC
 #elif SANITIZER_WORDSIZE == 32
@@ -240,6 +241,7 @@
 #    define ASAN_SHADOW_OFFSET_CONST 0x000000007fff8000
 #  endif
 #endif
+#endif
 
 #if defined(__cplusplus)
 #  include "asan_internal.h"
@@ -273,19 +275,29 @@ static const u64 kConstShadowOffset = ASAN_SHADOW_OFFSET_CONST;
 
 // If 1, all shadow boundaries are constants.
 // Don't set to 1 other than for testing.
-#  define ASAN_FIXED_MAPPING 0
+#  if defined(ASAN_MEMORY_PIVOT) && ASAN_MEMORY_PIVOT > 0
+#    define ASAN_FIXED_MAPPING 1
+#  else
+#    define ASAN_FIXED_MAPPING 0
+#  endif
 
 namespace __asan {
 
 extern uptr AsanMappingProfile[];
 
 #  if ASAN_FIXED_MAPPING
+#    if defined(ASAN_MEMORY_PIVOT) && ASAN_MEMORY_PIVOT > 0
+static uptr kHighMemEnd = ~(uptr)0;
+static uptr kMidMemBeg = 0;
+static uptr kMidMemEnd = 0;
+#    else
 // Fixed mapping for 64-bit Linux. Mostly used for performance comparison
 // with non-fixed mapping. As of r175253 (Feb 2013) the performance
 // difference between fixed and non-fixed mapping is below the noise level.
 static uptr kHighMemEnd = 0x7fffffffffffULL;
 static uptr kMidMemBeg = 0x3000000000ULL;
 static uptr kMidMemEnd = 0x4fffffffffULL;
+#    endif
 #  else
 extern uptr kHighMemEnd, kMidMemBeg, kMidMemEnd;  // Initialized in __asan_init.
 #  endif
@@ -296,7 +308,7 @@ extern uptr kHighMemEnd, kMidMemBeg, kMidMemEnd;  // Initialized in __asan_init.
 #    include "asan_mapping_sparc64.h"
 #  elif defined(ASAN_MEMORY_PIVOT) && ASAN_MEMORY_PIVOT > 0
 #    ifndef ASAN_PIVOT_MASK
-#      define ASAN_PIVOT_MASK ~(uptr)0
+#      define ASAN_PIVOT_MASK 0x0fffffffULL
 #    endif
 #    ifndef ASAN_LOWER_REGION_BASE
 #      define ASAN_LOWER_REGION_BASE 0x10000000ULL
@@ -317,6 +329,65 @@ extern uptr kHighMemEnd, kMidMemBeg, kMidMemEnd;  // Initialized in __asan_init.
                       ((uptr)((sptr)(ASAN_MEMORY_PIVOT & ASAN_PIVOT_MASK) +  \
                               (((sptr)(mem) - (sptr)ASAN_SHADOW_OFFSET)      \
                                << ASAN_SHADOW_SCALE))))))
+
+#    define kLowMemBeg ASAN_LOWER_REGION_BASE
+#    define kLowMemEnd (ASAN_UPPER_REGION_BASE - 1)
+
+#    define kLowShadowBeg ASAN_UPPER_REGION_BASE
+#    define kLowShadowEnd (ASAN_SHADOW_OFFSET - 1)
+
+#    define kHighMemBeg ASAN_MEMORY_PIVOT
+
+#    define kHighShadowBeg ASAN_SHADOW_OFFSET
+#    define kHighShadowEnd (ASAN_MEMORY_PIVOT - 1)
+
+#    define kMidShadowBeg 0
+#    define kMidShadowEnd 0
+#    define kShadowGapBeg 0
+#    define kShadowGapEnd 0
+#    define kShadowGap2Beg 0
+#    define kShadowGap2End 0
+#    define kShadowGap3Beg 0
+#    define kShadowGap3End 0
+
+namespace __asan {
+
+static inline bool AddrIsInLowMem(uptr a) {
+  PROFILE_ASAN_MAPPING();
+  return a >= kLowMemBeg && a <= kLowMemEnd;
+}
+
+static inline bool AddrIsInLowShadow(uptr a) {
+  PROFILE_ASAN_MAPPING();
+  return a >= kLowShadowBeg && a <= kLowShadowEnd;
+}
+
+static inline bool AddrIsInMidMem(uptr a) {
+  PROFILE_ASAN_MAPPING();
+  return false;
+}
+
+static inline bool AddrIsInMidShadow(uptr a) {
+  PROFILE_ASAN_MAPPING();
+  return false;
+}
+
+static inline bool AddrIsInHighMem(uptr a) {
+  PROFILE_ASAN_MAPPING();
+  return a >= kHighMemBeg && a <= kHighMemEnd;
+}
+
+static inline bool AddrIsInHighShadow(uptr a) {
+  PROFILE_ASAN_MAPPING();
+  return a >= kHighShadowBeg && a <= kHighShadowEnd;
+}
+
+static inline bool AddrIsInShadowGap(uptr a) {
+  PROFILE_ASAN_MAPPING();
+  return false;
+}
+
+}  // namespace __asan
 #  else
 #    define MEM_TO_SHADOW(mem) \
       ((STRIP_MTE_TAG(mem) >> ASAN_SHADOW_SCALE) + (ASAN_SHADOW_OFFSET))

@@ -19,7 +19,8 @@
 
 #if !SANITIZER_LINUX && !SANITIZER_FREEBSD && !SANITIZER_APPLE &&    \
     !SANITIZER_NETBSD && !SANITIZER_WINDOWS && !SANITIZER_FUCHSIA && \
-    !SANITIZER_SOLARIS && !SANITIZER_HAIKU && !SANITIZER_AIX
+    !SANITIZER_SOLARIS && !SANITIZER_HAIKU && !SANITIZER_AIX &&      \
+    !SANITIZER_BAREMETAL
 #  error "Interception doesn't work on this operating system."
 #endif
 
@@ -372,7 +373,7 @@ void* LookupSymbolDefault(const char* symbol);
 void* LookupSymbolNext(const char* symbol);
 void* LookupSymbolNextVersioned(const char* symbol, const char* version);
 
-#if defined(__ELF__) && !SANITIZER_FUCHSIA
+#if defined(__ELF__) && !SANITIZER_FUCHSIA && !SANITIZER_BAREMETAL
 // The use of interceptors makes many sanitizers unusable for static linking.
 // Define a function, if called, will cause a linker error (undefined _DYNAMIC).
 // However, -static-pie (which is not common) cannot be detected at link time.

@@ -16,7 +16,8 @@
     !defined(__APPLE__) && !defined(_WIN32) && !defined(__Fuchsia__) &&     \
     !(defined(__sun__) && defined(__svr4__)) && !defined(__HAIKU__) &&      \
     !defined(__wasi__) && !defined(__NVPTX__) && !defined(__AMDGPU__) &&    \
-    !defined(__SPIRV__) && !defined(_AIX)
+    !defined(__SPIRV__) && !defined(_AIX) && !defined(ASAN_BAREMETAL) &&    \
+    !defined(COMPILER_RT_ASAN_BAREMETAL)
 #  error "This operating system is not supported"
 #endif
 
@@ -147,6 +148,13 @@
 #  define SANITIZER_FUCHSIA 1
 #else
 #  define SANITIZER_FUCHSIA 0
+#endif
+
+#if defined(ASAN_BAREMETAL) || defined(COMPILER_RT_ASAN_BAREMETAL) || \
+    defined(COMPILER_RT_BAREMETAL)
+#  define SANITIZER_BAREMETAL 1
+#else
+#  define SANITIZER_BAREMETAL 0
 #endif
 
 // Assume linux that is not glibc or android is musl libc.
@@ -477,7 +485,7 @@
 #endif
 
 // Enable offline markup symbolizer for Fuchsia.
-#if SANITIZER_FUCHSIA
+#if SANITIZER_FUCHSIA || SANITIZER_BAREMETAL
 #  define SANITIZER_SYMBOLIZER_MARKUP 1
 #else
 #  define SANITIZER_SYMBOLIZER_MARKUP 0
