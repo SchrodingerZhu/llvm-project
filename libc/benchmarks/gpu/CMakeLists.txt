@@ -58,7 +58,7 @@ function(add_benchmark_framework_library name)
     target_compile_definitions(${name} PRIVATE TARGET_SUPPORTS_CLOCK)
   endif()
 
-  _get_hermetic_test_compile_options(compile_options "")
+  _get_hermetic_test_compile_options(compile_options "" "")
   target_include_directories(${name} PRIVATE ${LIBC_INCLUDE_DIR})
   target_compile_options(${name} PRIVATE ${compile_options} -nostdinc++)
 
@@ -75,6 +75,7 @@ add_benchmark_framework_library(
     Random.h
   DEPENDS
     libc.benchmarks.benchmark
+    libc.benchmarks.runtime_estimator
     libc.benchmarks.gpu.timing.timing
     libc.hdr.stdint_proxy
     libc.src.__support.CPP.string

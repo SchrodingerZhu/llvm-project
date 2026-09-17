@@ -13,6 +13,16 @@ add_header_library(
     libc.src.__support.macros.config
 )
 
+add_header_library(
+  runtime_estimator
+  HDRS
+    RuntimeEstimator.h
+  DEPENDS
+    libc.hdr.stdint_proxy
+    libc.src.__support.FPUtil.sqrt
+    libc.src.__support.macros.config
+)
+
 if(LIBC_TARGET_OS_IS_GPU)
   add_subdirectory(gpu)
   return()
