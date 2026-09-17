@@ -74,6 +74,7 @@ add_benchmark_framework_library(
     LibcGpuBenchmark.h
     Random.h
   DEPENDS
+    libc.benchmarks.benchmark
     libc.benchmarks.gpu.timing.timing
     libc.hdr.stdint_proxy
     libc.src.__support.CPP.string

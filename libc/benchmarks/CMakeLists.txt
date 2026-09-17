@@ -3,6 +3,16 @@ if(NOT LIBC_INCLUDE_BENCHMARKS)
   return()
 endif()
 
+add_header_library(
+  benchmark
+  HDRS
+    Benchmark.h
+  DEPENDS
+    libc.hdr.stdint_proxy
+    libc.src.__support.macros.attributes
+    libc.src.__support.macros.config
+)
+
 if(LIBC_TARGET_OS_IS_GPU)
   add_subdirectory(gpu)
   return()
