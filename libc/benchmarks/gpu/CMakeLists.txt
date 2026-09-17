@@ -68,6 +68,7 @@ endfunction()
 add_benchmark_framework_library(
   LibcGpuBenchmark
   SRCS
+    ../Benchmark.cpp
     LibcGpuBenchmark.cpp
     LibcGpuBenchmarkMain.cpp
   HDRS
@@ -78,6 +79,7 @@ add_benchmark_framework_library(
     libc.benchmarks.runtime_estimator
     libc.benchmarks.gpu.timing.timing
     libc.hdr.stdint_proxy
+    libc.hdr.time_macros
     libc.src.__support.CPP.string
     libc.src.__support.CPP.string_view
     libc.src.__support.CPP.type_traits
@@ -91,7 +93,6 @@ add_benchmark_framework_library(
     libc.src.__support.sign
     libc.src.__support.fixedvector
     libc.src.__support.GPU.utils
-    libc.src.__support.time.gpu.time_utils
     libc.src.__support.macros.attributes
     libc.src.__support.macros.config
     libc.src.__support.macros.properties.types

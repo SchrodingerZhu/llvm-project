@@ -16,7 +16,6 @@
 #define LLVM_LIBC_BENCHMARKS_LIBC_GPU_BENCHMARK_H
 
 #include "benchmarks/Benchmark.h"
-#include "benchmarks/RuntimeEstimator.h"
 #include "benchmarks/gpu/Random.h"
 
 #include "benchmarks/gpu/timing/timing.h"
