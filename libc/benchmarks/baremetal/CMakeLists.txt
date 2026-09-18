@@ -20,3 +20,34 @@ add_benchmark_framework_library(
 )
 
 target_link_libraries(LibcBaremetalBenchmark PRIVATE LibcBenchmark)
+
+function(add_baremetal_benchmarks)
+  include(CheckCXXSourceCompiles)
+  set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
+  string(JOIN " " CMAKE_REQUIRED_FLAGS ${LIBC_COMPILE_OPTIONS_DEFAULT})
+  set(CMAKE_REQUIRED_INCLUDES ${LIBC_SOURCE_DIR})
+  set(CMAKE_REQUIRED_DEFINITIONS
+    -DLIBC_FULL_BUILD -DLIBC_NAMESPACE=${LIBC_NAMESPACE})
+  check_cxx_source_compiles(
+    "#include \"benchmarks/timing/timing.h\"
+int main() { return 0; }"
+    LIBC_BAREMETAL_BENCHMARK_HAS_TIMING)
+  if(NOT LIBC_BAREMETAL_BENCHMARK_HAS_TIMING)
+    return()
+  endif()
+  if(LIBC_CONF_PRINTF_DISABLE_FLOAT)
+    message(FATAL_ERROR
+      "Baremetal benchmarks require -DLIBC_CONF_PRINTF_DISABLE_FLOAT=OFF")
+  endif()
+
+  add_baremetal_benchmark(
+    isalpha_benchmark
+    SRCS ${LIBC_SOURCE_DIR}/benchmarks/src/ctype/isalpha_benchmark.cpp
+    DEPENDS
+      libc.benchmarks.benchmark
+      libc.benchmarks.timing.timing
+      libc.src.ctype.isalpha
+  )
+endfunction()
+
+add_baremetal_benchmarks()

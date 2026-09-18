@@ -17,7 +17,9 @@ add_benchmark(
   SUITE
     libc-gpu-ctype-benchmarks
   SRCS
-    isalpha_benchmark.cpp
+    ${LIBC_SOURCE_DIR}/benchmarks/src/ctype/isalpha_benchmark.cpp
   DEPENDS
+    libc.benchmarks.benchmark
+    libc.benchmarks.timing.timing
     libc.src.ctype.isalpha
 )
