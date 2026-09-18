@@ -18,6 +18,7 @@
 #include "src/__support/CPP/algorithm.h"
 #include "src/__support/CPP/array.h"
 #include "src/__support/CPP/atomic.h"
+#include "src/__support/CPP/type_traits.h"
 #include "src/__support/GPU/utils.h"
 #include "src/__support/macros/attributes.h"
 #include "src/__support/macros/config.h"
@@ -39,63 +40,25 @@ namespace LIBC_NAMESPACE_DECL {
   return stop - start;
 }
 
-// Stimulate a simple function and obtain its latency in clock cycles on the
-// system. This function cannot be inlined or else it will disturb the very
-// delicate balance of hard-coded dependencies.
-template <typename F, typename T>
-[[gnu::noinline]] static LIBC_INLINE uint64_t latency(F f, T t) {
-  // We need to store the input somewhere to guarantee that the compiler will
-  // not constant propagate it and remove the profiling region.
-  volatile T storage = t;
-  T arg = storage;
-
-  // Get the current timestamp from the clock.
+// Measure a callable, including the barriers needed to complete memory
+// accesses. Capture inputs in the callable so they are loaded after the start
+// timestamp.
+template <typename F>
+[[gnu::noinline]] static LIBC_INLINE uint64_t latency(F &&f) {
+  auto *callable = __builtin_addressof(f);
   cpp::atomic_thread_fence(cpp::MemoryOrder::ACQ_REL);
-  uint64_t start = gpu::processor_clock();
-
-  // This forces the compiler to load the input argument and run the clock cycle
-  // counter before the profiling region.
-  asm("" ::"llr"(start));
-
-  // Run the function under test and return its value.
-  auto result = f(arg);
-
-  // This inline assembly performs a no-op which forces the result to both be
-  // used and prevents us from exiting this region before it's complete.
-  asm("or.b32 %[v_reg], %[v_reg], 0;" ::[v_reg] "r"(result));
-
-  // Obtain the current timestamp after running the calculation and force
-  // ordering.
-  uint64_t stop = gpu::processor_clock();
+  const uint64_t start = gpu::processor_clock();
+  // Hide the callable's address to prevent folding or hoisting its inputs.
+  asm volatile("" : "+l"(callable) : "l"(start) : "memory");
+  if constexpr (cpp::is_void_v<decltype(static_cast<F &&>(*callable)())>) {
+    static_cast<F &&>(*callable)();
+  } else {
+    decltype(auto) result = static_cast<F &&>(*callable)();
+    // Escape the result through memory to support any return type.
+    asm volatile("" : : "l"(__builtin_addressof(result)) : "memory");
+  }
   cpp::atomic_thread_fence(cpp::MemoryOrder::ACQ_REL);
-  asm("" ::"r"(stop));
-  volatile auto output = result;
-
-  // Return the time elapsed.
-  return stop - start;
-}
-
-template <typename F, typename T1, typename T2>
-static LIBC_INLINE uint64_t latency(F f, T1 t1, T2 t2) {
-  volatile T1 storage = t1;
-  volatile T2 storage2 = t2;
-  T1 arg = storage;
-  T2 arg2 = storage2;
-
-  cpp::atomic_thread_fence(cpp::MemoryOrder::ACQ_REL);
-  uint64_t start = gpu::processor_clock();
-
-  asm("" ::"llr"(start));
-
-  auto result = f(arg, arg2);
-
-  asm("or.b32 %[v_reg], %[v_reg], 0;" ::[v_reg] "r"(result));
-
-  uint64_t stop = gpu::processor_clock();
-  cpp::atomic_thread_fence(cpp::MemoryOrder::ACQ_REL);
-  asm("" ::"r"(stop));
-  volatile auto output = result;
-
+  const uint64_t stop = gpu::processor_clock();
   return stop - start;
 }
 

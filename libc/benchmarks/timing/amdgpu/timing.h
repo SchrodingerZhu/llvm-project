@@ -38,75 +38,25 @@ namespace LIBC_NAMESPACE_DECL {
   return stop - start;
 }
 
-// Profile a simple function and obtain its latency in clock cycles on the
-// system. This function cannot be inlined or else it will disturb the very
-// delicate balance of hard-coded dependencies.
-template <typename F, typename T>
-[[gnu::noinline]] static LIBC_INLINE uint64_t latency(F f, T t) {
-  // We need to store the input somewhere to guarantee that the compiler
-  // will not constant propagate it and remove the profiling region.
-  volatile T storage = t;
-  T arg = storage;
-
-  // The AMDGPU architecture needs to wait on pending results.
+// Measure a callable, including the barriers needed to complete memory
+// accesses. Capture inputs in the callable so they are loaded after the start
+// timestamp.
+template <typename F>
+[[gnu::noinline]] static LIBC_INLINE uint64_t latency(F &&f) {
+  auto *callable = __builtin_addressof(f);
   cpp::atomic_thread_fence(cpp::MemoryOrder::ACQ_REL);
-  // Get the current timestamp from the clock.
-  uint64_t start = gpu::processor_clock();
-
-  // This forces the compiler to load the input argument and run the clock
-  // cycle counter before the profiling region.
-  asm("" : "+v"(arg) : "s"(start));
-
-  // Run the function under test and return its value.
-  auto result = f(arg);
-
-  // This inline assembly performs a no-op which forces the result to both
-  // be used and prevents us from exiting this region before it's complete.
-  if constexpr (cpp::is_same_v<decltype(result), char> ||
-                cpp::is_same_v<decltype(result), bool>)
-    // AMDGPU does not support input register constraints for i1 and i8, so we
-    // cast it to a 32-bit integer. This does not add an additional assembly
-    // instruction (https://godbolt.org/z/zxGqv8G91).
-    asm("v_or_b32 %[v_reg], 0, %[v_reg]\n" ::[v_reg] "v"(
-        static_cast<uint32_t>(result)));
-  else
-    asm("v_or_b32 %[v_reg], 0, %[v_reg]\n" ::[v_reg] "v"(result));
-
-  // Obtain the current timestamp after running the calculation and force
-  // ordering.
-  uint64_t stop = gpu::processor_clock();
-  asm("" ::"s"(stop));
+  const uint64_t start = gpu::processor_clock();
+  // Hide the callable's address to prevent folding or hoisting its inputs.
+  asm volatile("" : "+v"(callable) : "s"(start) : "memory");
+  if constexpr (cpp::is_void_v<decltype(static_cast<F &&>(*callable)())>) {
+    static_cast<F &&>(*callable)();
+  } else {
+    decltype(auto) result = static_cast<F &&>(*callable)();
+    // Escape the result through memory to support any return type.
+    asm volatile("" : : "v"(__builtin_addressof(result)) : "memory");
+  }
   cpp::atomic_thread_fence(cpp::MemoryOrder::ACQ_REL);
-
-  // Return the time elapsed.
-  return stop - start;
-}
-
-template <typename F, typename T1, typename T2>
-[[gnu::noinline]] static LIBC_INLINE uint64_t latency(F f, T1 t1, T2 t2) {
-  volatile T1 storage1 = t1;
-  volatile T2 storage2 = t2;
-  T1 arg1 = storage1;
-  T2 arg2 = storage2;
-
-  cpp::atomic_thread_fence(cpp::MemoryOrder::ACQ_REL);
-  uint64_t start = gpu::processor_clock();
-
-  asm("" ::"s"(start));
-
-  auto result = f(arg1, arg2);
-
-  if constexpr (cpp::is_same_v<decltype(result), char> ||
-                cpp::is_same_v<decltype(result), bool>)
-    asm("v_or_b32 %[v_reg], 0, %[v_reg]\n" ::[v_reg] "v"(
-        static_cast<uint32_t>(result)));
-  else
-    asm("v_or_b32 %[v_reg], 0, %[v_reg]\n" ::[v_reg] "v"(result));
-
-  uint64_t stop = gpu::processor_clock();
-  asm("" ::"s"(stop));
-  cpp::atomic_thread_fence(cpp::MemoryOrder::ACQ_REL);
-
+  const uint64_t stop = gpu::processor_clock();
   return stop - start;
 }
 

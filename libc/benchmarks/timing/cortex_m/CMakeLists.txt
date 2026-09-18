@@ -5,6 +5,7 @@ add_header_library(
   DEPENDS
     libc.hdr.stdint_proxy
     libc.src.__support.CPP.bit
+    libc.src.__support.CPP.type_traits
     libc.src.__support.macros.attributes
     libc.src.__support.macros.config
 )

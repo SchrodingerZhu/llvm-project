@@ -18,6 +18,6 @@
 
 uint64_t BM_IsAlpha() {
   char x = 'c';
-  return LIBC_NAMESPACE::latency(LIBC_NAMESPACE::isalpha, x);
+  return LIBC_NAMESPACE::latency([x] { return LIBC_NAMESPACE::isalpha(x); });
 }
 BENCHMARK(LlvmLibcIsAlphaBenchmark, IsAlpha, BM_IsAlpha);

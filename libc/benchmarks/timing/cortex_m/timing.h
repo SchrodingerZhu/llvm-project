@@ -21,6 +21,7 @@
 
 #include "hdr/stdint_proxy.h"
 #include "src/__support/CPP/bit.h"
+#include "src/__support/CPP/type_traits.h"
 #include "src/__support/macros/attributes.h"
 #include "src/__support/macros/config.h"
 
@@ -40,29 +41,22 @@ LIBC_INLINE uint32_t read_dwt_cycle_counter() {
   return static_cast<uint32_t>(stop - start);
 }
 
-template <typename F, typename T>
-[[gnu::noinline]] static LIBC_INLINE uint64_t latency(F f, T t) {
-  volatile T storage = t;
-  T arg = storage;
+// Measure a callable, including the barriers needed to complete memory
+// accesses. Capture inputs in the callable so they are loaded after the start
+// timestamp.
+template <typename F>
+[[gnu::noinline]] static LIBC_INLINE uint64_t latency(F &&f) {
+  auto *callable = __builtin_addressof(f);
   const uint32_t start = read_dwt_cycle_counter();
-  // Register dependencies keep the call between the counter reads.
-  asm volatile("" : "+r"(arg) : "r"(start) : "memory");
-  auto result = f(arg);
-  asm volatile("" : : "r"(result) : "memory");
-  const uint32_t stop = read_dwt_cycle_counter();
-  return static_cast<uint32_t>(stop - start);
-}
-
-template <typename F, typename T1, typename T2>
-[[gnu::noinline]] static LIBC_INLINE uint64_t latency(F f, T1 t1, T2 t2) {
-  volatile T1 storage1 = t1;
-  volatile T2 storage2 = t2;
-  T1 arg1 = storage1;
-  T2 arg2 = storage2;
-  const uint32_t start = read_dwt_cycle_counter();
-  asm volatile("" : "+r"(arg1), "+r"(arg2) : "r"(start) : "memory");
-  auto result = f(arg1, arg2);
-  asm volatile("" : : "r"(result) : "memory");
+  // Hide the callable's address to prevent folding or hoisting its inputs.
+  asm volatile("" : "+r"(callable) : "r"(start) : "memory");
+  if constexpr (cpp::is_void_v<decltype(static_cast<F &&>(*callable)())>) {
+    static_cast<F &&>(*callable)();
+  } else {
+    decltype(auto) result = static_cast<F &&>(*callable)();
+    // Escape the result through memory to support any return type.
+    asm volatile("" : : "r"(__builtin_addressof(result)) : "memory");
+  }
   const uint32_t stop = read_dwt_cycle_counter();
   return static_cast<uint32_t>(stop - start);
 }
