@@ -37,7 +37,7 @@ add_benchmark_framework_library(
   LibcGpuBenchmark
   SRCS
     LibcGpuBenchmark.cpp
-    LibcGpuBenchmarkMain.cpp
+    ../BenchmarkMain.cpp
   HDRS
     LibcGpuBenchmark.h
     Random.h
