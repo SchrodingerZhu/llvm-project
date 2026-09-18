@@ -48,6 +48,33 @@ int main() { return 0; }"
       libc.benchmarks.timing.timing
       libc.src.ctype.isalpha
   )
+  foreach(function memcpy memmove memset memcmp bcmp bzero strlen strcmp memchr strchr)
+    if(function MATCHES "^(strlen|strcmp|memchr|strchr)$")
+      set(source string_benchmark.cpp)
+    else()
+      set(source memory_benchmark.cpp)
+    endif()
+    if(function MATCHES "^(bcmp|bzero)$")
+      set(header strings)
+    else()
+      set(header string)
+    endif()
+    string(TOUPPER ${function} upper_function)
+    add_baremetal_benchmark(
+      ${function}_benchmark
+      SRCS ${LIBC_SOURCE_DIR}/benchmarks/src/string/${source}
+      HDRS ${LIBC_SOURCE_DIR}/benchmarks/src/string/StringBenchmark.h
+      COMPILE_OPTIONS -DLIBC_BENCHMARK_${upper_function}
+      DEPENDS
+        libc.benchmarks.benchmark
+        libc.benchmarks.timing.timing
+        libc.src.${header}.${function}
+        libc.src.stdlib.aligned_alloc
+        libc.src.stdlib.free
+        libc.src.stdlib.exit
+        libc.src.stdio.printf
+    )
+  endforeach()
 endfunction()
 
 add_baremetal_benchmarks()

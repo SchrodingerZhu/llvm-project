@@ -74,19 +74,21 @@ class Benchmark {
   const cpp::string_view suite_name;
   const cpp::string_view test_name;
   const uint32_t num_threads;
+  const BenchmarkOptions options;
 
 public:
   Benchmark(uint64_t (*f)(), const char *suite, const char *test,
-            uint32_t threads)
+            uint32_t threads, BenchmarkOptions options = {})
       : target(BenchmarkTarget(f)), suite_name(suite), test_name(test),
-        num_threads(threads) {
+        num_threads(threads), options(options) {
     add_benchmark(this);
   }
 
   Benchmark(uint64_t (*f)(uint32_t), char const *suite_name,
-            char const *test_name, uint32_t num_threads)
+            char const *test_name, uint32_t num_threads,
+            BenchmarkOptions options = {})
       : target(BenchmarkTarget(f)), suite_name(suite_name),
-        test_name(test_name), num_threads(num_threads) {
+        test_name(test_name), num_threads(num_threads), options(options) {
     add_benchmark(this);
   }
 
@@ -98,10 +100,7 @@ protected:
   static void add_benchmark(Benchmark *benchmark);
 
 private:
-  BenchmarkResult run() {
-    BenchmarkOptions options;
-    return benchmark(options, target);
-  }
+  BenchmarkResult run() { return benchmark(options, target); }
 };
 
 } // namespace benchmarks
