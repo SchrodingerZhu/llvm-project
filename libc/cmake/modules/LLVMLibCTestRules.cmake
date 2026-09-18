@@ -143,6 +143,7 @@ endfunction()
 # Usage:
 #   get_object_files_for_test(<result var>
 #                             <skipped_entrypoints_var>
+#                             [PUBLIC]
 #                             <target0> [<target1> ...])
 #
 #   The list of object files is collected in <result_var>.
@@ -150,11 +151,22 @@ endfunction()
 #   set to a true value.
 #   targetN is either an "add_entrypoint_target" target or an
 #   "add_object_library" target.
+#   PUBLIC selects entrypoint objects with public C symbols instead of
+#   the internal objects used by unit tests.
 function(get_object_files_for_test result skipped_entrypoints_list)
+  cmake_parse_arguments(COLLECT_OBJECTS "PUBLIC" "" "" ${ARGN})
+  set(cache_suffix "")
+  set(entrypoint_property OBJECT_FILE_RAW)
+  set(recursive_options "")
+  if(COLLECT_OBJECTS_PUBLIC)
+    set(cache_suffix "_PUBLIC")
+    set(entrypoint_property OBJECT_FILE)
+    set(recursive_options PUBLIC)
+  endif()
   set(object_files "")
   set(skipped_list "")
   set(checked_list "")
-  set(unchecked_list "${ARGN}")
+  set(unchecked_list "${COLLECT_OBJECTS_UNPARSED_ARGUMENTS}")
   list(REMOVE_DUPLICATES unchecked_list)
 
   foreach(dep IN LISTS unchecked_list)
@@ -179,19 +191,19 @@ function(get_object_files_for_test result skipped_entrypoints_list)
       continue()
     endif()
 
-    get_target_property(dep_checked ${dep} "CHECK_OBJ_FOR_TESTS")
+    get_target_property(dep_checked ${dep} "CHECK_OBJ_FOR_TESTS${cache_suffix}")
 
     if(dep_checked)
       # Target full dependency has already been checked.  Just use the results.
-      get_target_property(dep_obj ${dep} "OBJECT_FILES_FOR_TESTS")
-      get_target_property(dep_skip ${dep} "SKIPPED_LIST_FOR_TESTS")
+      get_target_property(dep_obj ${dep} "OBJECT_FILES_FOR_TESTS${cache_suffix}")
+      get_target_property(dep_skip ${dep} "SKIPPED_LIST_FOR_TESTS${cache_suffix}")
     else()
       # Target full dependency hasn't been checked.  Recursively check its DEPS.
       set(dep_obj "${dep}")
       set(dep_skip "")
 
       get_target_property(indirect_deps ${dep} "DEPS")
-      get_object_files_for_test(dep_obj dep_skip ${indirect_deps})
+      get_object_files_for_test(dep_obj dep_skip ${recursive_options} ${indirect_deps})
 
       if(${dep_type} STREQUAL ${OBJECT_LIBRARY_TARGET_TYPE})
         get_target_property(dep_object_files ${dep} "OBJECT_FILES")
@@ -204,20 +216,20 @@ function(get_object_files_for_test result skipped_entrypoints_list)
           list(APPEND dep_skip ${dep})
           list(REMOVE_ITEM dep_obj ${dep})
         endif()
-        get_target_property(object_file_raw ${dep} "OBJECT_FILE_RAW")
-        if(object_file_raw)
+        get_target_property(entrypoint_object ${dep} ${entrypoint_property})
+        if(entrypoint_object)
           # TODO: Remove this once we stop suffixing the target with ".__internal__"
           if(fq_target_name STREQUAL "libc.test.include.issignaling_c_test" OR fq_target_name STREQUAL "libc.test.include.iscanonical_c_test")
-            string(REPLACE ".__internal__" "" object_file_raw ${object_file_raw})
+            string(REPLACE ".__internal__" "" entrypoint_object ${entrypoint_object})
           endif()
-          list(APPEND dep_obj ${object_file_raw})
+          list(APPEND dep_obj ${entrypoint_object})
         endif()
       endif()
 
       set_target_properties(${dep} PROPERTIES
-        OBJECT_FILES_FOR_TESTS "${dep_obj}"
-        SKIPPED_LIST_FOR_TESTS "${dep_skip}"
-        CHECK_OBJ_FOR_TESTS "YES"
+        OBJECT_FILES_FOR_TESTS${cache_suffix} "${dep_obj}"
+        SKIPPED_LIST_FOR_TESTS${cache_suffix} "${dep_skip}"
+        CHECK_OBJ_FOR_TESTS${cache_suffix} "YES"
       )
 
     endif()
@@ -736,12 +748,14 @@ endfunction()
 # statically linked and consists of pieces drawn only from LLVM's libc. Nothing,
 # including the startup objects, come from the system libc.
 #
-# For the GPU, these can be either tests or benchmarks, depending on the value
-# of the LINK_LIBRARIES arg.
+# IS_BENCHMARK excludes the program from the hermetic test suite.
+# NO_TEST_FRAMEWORK links public libc entrypoints without unit-test support.
 #
 # Usage:
 #   add_libc_hermetic(
 #     <target name>
+#     [IS_BENCHMARK]
+#     [NO_TEST_FRAMEWORK]
 #     SUITE <the suite to which the test should belong>
 #     SRCS <src1.cpp> [src2.cpp ...]
 #     HDRS [hdr1.cpp ...]
@@ -759,7 +773,7 @@ function(add_libc_hermetic test_name)
   endif()
   cmake_parse_arguments(
     "HERMETIC_TEST"
-    "IS_GPU_BENCHMARK;NO_RUN_POSTBUILD;C_TEST" # Optional arguments
+    "IS_BENCHMARK;NO_TEST_FRAMEWORK;NO_RUN_POSTBUILD;C_TEST" # Optional arguments
     "SUITE;CXX_STANDARD" # Single value arguments
     "SRCS;HDRS;DEPENDS;ARGS;ENV;COMPILE_OPTIONS;LINK_LIBRARIES;FLAGS;LOADER_ARGS" # Multi-value arguments
     ${ARGN}
@@ -782,18 +796,22 @@ function(add_libc_hermetic test_name)
     libc.startup.${LIBC_TARGET_OS}.crt1
     # We always add the memory functions objects. This is because the
     # compiler's codegen can emit calls to the C memory functions.
-    libc.src.__support.StringUtil.error_to_string
     libc.src.string.memcmp
     libc.src.string.memcpy
     libc.src.string.memmove
     libc.src.string.memset
     libc.src.strings.bcmp
     libc.src.strings.bzero
-    libc.test.UnitTest.ErrnoSetterMatcher
-    libc.test.UnitTest.LibcTest
-    libc.test.UnitTest.HermeticTestUtils
   )
-  if(HERMETIC_TEST_C_TEST)
+  if(NOT HERMETIC_TEST_NO_TEST_FRAMEWORK)
+    list(APPEND fq_deps_list
+      libc.src.__support.StringUtil.error_to_string
+      libc.test.UnitTest.ErrnoSetterMatcher
+      libc.test.UnitTest.LibcTest
+      libc.test.UnitTest.HermeticTestUtils
+    )
+  endif()
+  if(HERMETIC_TEST_C_TEST AND NOT HERMETIC_TEST_NO_TEST_FRAMEWORK)
     list(APPEND fq_deps_list libc.test.UnitTest.LibcCTest)
   endif()
   if(LIBC_TARGET_ARCHITECTURE_IS_AARCH64 AND NOT(LIBC_TARGET_OS_IS_BAREMETAL))
@@ -801,7 +819,8 @@ function(add_libc_hermetic test_name)
   endif()
 
   # Syscalls used by death tests.
-  if(LIBC_TEST_SUBPROCESS_TESTS AND NOT HERMETIC_TEST_C_TEST)
+  if(LIBC_TEST_SUBPROCESS_TESTS AND NOT HERMETIC_TEST_C_TEST AND
+     NOT HERMETIC_TEST_NO_TEST_FRAMEWORK)
     list(APPEND fq_deps_list
       libc.test.UnitTest.LibcDeathTestExecutors
       libc.src.poll.poll
@@ -874,10 +893,14 @@ function(add_libc_hermetic test_name)
 
   list(REMOVE_DUPLICATES fq_deps_list)
 
-  # TODO: Instead of gathering internal object files from entrypoints,
-  # collect the object files with public names of entrypoints.
+  set(collect_options "")
+  if(HERMETIC_TEST_NO_TEST_FRAMEWORK)
+    # The test utilities normally supply public C entrypoints. Standalone
+    # programs need the public libc objects instead.
+    set(collect_options PUBLIC)
+  endif()
   get_object_files_for_test(
-    link_object_files skipped_entrypoints_list ${fq_deps_list})
+    link_object_files skipped_entrypoints_list ${collect_options} ${fq_deps_list})
   if(skipped_entrypoints_list)
     if(LIBC_CMAKE_VERBOSE_LOGGING)
       set(msg "Skipping hermetic test ${fq_target_name} as it has missing deps: "
@@ -1066,9 +1089,8 @@ function(add_libc_hermetic test_name)
   endif()
 
   add_dependencies(${HERMETIC_TEST_SUITE} ${fq_target_name})
-  if(NOT ${HERMETIC_TEST_IS_GPU_BENCHMARK})
-    # If it is a benchmark, it will already have been added to the
-    # gpu-benchmark target
+  if(NOT ${HERMETIC_TEST_IS_BENCHMARK})
+    # Benchmarks are registered with their own suite.
     add_dependencies(libc-hermetic-tests ${fq_target_name})
     if(LIBC_HERMETIC_TEST_SUITE)
       add_dependencies(${LIBC_HERMETIC_TEST_SUITE} ${fq_target_name})

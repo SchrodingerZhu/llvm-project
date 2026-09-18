@@ -30,3 +30,24 @@ function(add_benchmark_framework_library name)
   add_dependencies(${name} ${TEST_LIB_DEPENDS})
 endfunction()
 
+function(add_libc_benchmark benchmark_name)
+  if(NOT LLVM_LIBC_FULL_BUILD)
+    message(FATAL_ERROR "Freestanding benchmarks require LLVM_LIBC_FULL_BUILD")
+  endif()
+  add_libc_hermetic(
+    ${benchmark_name}
+    IS_BENCHMARK
+    NO_TEST_FRAMEWORK
+    LINK_LIBRARIES
+      LibcBenchmark
+    DEPENDS
+      libc.src.stdio.printf
+      libc.src.stdlib.aligned_alloc
+      libc.src.stdlib.calloc
+      libc.src.stdlib.free
+      libc.src.stdlib.malloc
+      libc.src.stdlib.realloc
+      libc.src.time.clock
+    ${ARGN}
+  )
+endfunction()
