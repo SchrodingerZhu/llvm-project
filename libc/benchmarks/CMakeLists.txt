@@ -1,4 +1,4 @@
-# The CPU build depends on Google benchmark.
+# Hosted CPU benchmarks depend on Google Benchmark.
 if(NOT LIBC_INCLUDE_BENCHMARKS)
   return()
 endif()
@@ -23,8 +23,23 @@ add_header_library(
     libc.src.__support.macros.config
 )
 
-if(LIBC_TARGET_OS_IS_GPU)
-  add_subdirectory(gpu)
+if(LIBC_TARGET_OS_IS_GPU OR LIBC_TARGET_OS_IS_BAREMETAL)
+  include(LLVMLibCBenchmarkRules)
+  add_benchmark_framework_library(
+    LibcBenchmark
+    SRCS
+      Benchmark.cpp
+    DEPENDS
+      libc.benchmarks.benchmark
+      libc.benchmarks.runtime_estimator
+      libc.hdr.time_macros
+      libc.src.__support.CPP.algorithm
+      libc.src.__support.FPUtil.nearest_integer_operations
+      libc.src.time.clock
+  )
+  if(LIBC_TARGET_OS_IS_GPU)
+    add_subdirectory(gpu)
+  endif()
   return()
 endif()
 
