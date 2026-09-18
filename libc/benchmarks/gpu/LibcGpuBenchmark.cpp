@@ -21,18 +21,11 @@
 #include "src/__support/FPUtil/FPBits.h"
 #include "src/__support/FPUtil/sqrt.h"
 #include "src/__support/GPU/utils.h"
-#include "src/__support/fixedvector.h"
 #include "src/__support/macros/config.h"
 #include "src/stdio/printf.h"
 
 namespace LIBC_NAMESPACE_DECL {
 namespace benchmarks {
-
-FixedVector<Benchmark *, 64> benchmarks;
-
-void Benchmark::add_benchmark(Benchmark *benchmark) {
-  benchmarks.push_back(benchmark);
-}
 
 static void atomic_add_double(cpp::Atomic<uint64_t> &atomic_bits,
                               double value) {
@@ -155,10 +148,10 @@ void print_results(Benchmark *b) {
       static_cast<unsigned>(num_threads));
 }
 
-void print_header() {
+void print_header(const Benchmark *b) {
   LIBC_NAMESPACE::printf("%s", GREEN);
   LIBC_NAMESPACE::printf("Running Suite: %-10s\n",
-                         benchmarks[0]->get_suite_name().data());
+                         b->get_suite_name().data());
   LIBC_NAMESPACE::printf("%s", RESET);
   cpp::string titles = "Benchmark                |  Cycles (Mean) |   Stddev | "
                        "    Min |     Max |     Iterations |  Threads |\n";
@@ -173,7 +166,7 @@ void Benchmark::run_benchmarks() {
   uint64_t id = gpu::get_thread_id();
 
   if (id == 0)
-    print_header();
+    print_header(benchmarks[0]);
 
   gpu::sync_threads();
 

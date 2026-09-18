@@ -22,6 +22,12 @@
 namespace LIBC_NAMESPACE_DECL {
 namespace benchmarks {
 
+FixedVector<Benchmark *, 64> Benchmark::benchmarks;
+
+void Benchmark::add_benchmark(Benchmark *benchmark) {
+  benchmarks.push_back(benchmark);
+}
+
 BenchmarkResult benchmark(const BenchmarkOptions &options,
                           const BenchmarkTarget &target) {
   BenchmarkResult result;

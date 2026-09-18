@@ -9,6 +9,8 @@ add_header_library(
     Benchmark.h
   DEPENDS
     libc.hdr.stdint_proxy
+    libc.src.__support.CPP.string_view
+    libc.src.__support.fixedvector
     libc.src.__support.macros.attributes
     libc.src.__support.macros.config
 )

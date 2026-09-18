@@ -23,7 +23,6 @@
 #include "hdr/stdint_proxy.h"
 #include "src/__support/CPP/algorithm.h"
 #include "src/__support/CPP/array.h"
-#include "src/__support/CPP/string_view.h"
 #include "src/__support/CPP/type_traits.h"
 #include "src/__support/FPUtil/FPBits.h"
 #include "src/__support/macros/config.h"
@@ -31,41 +30,6 @@
 namespace LIBC_NAMESPACE_DECL {
 
 namespace benchmarks {
-
-class Benchmark {
-  const BenchmarkTarget target;
-  const cpp::string_view suite_name;
-  const cpp::string_view test_name;
-  const uint32_t num_threads;
-
-public:
-  Benchmark(uint64_t (*f)(), const char *suite, const char *test,
-            uint32_t threads)
-      : target(BenchmarkTarget(f)), suite_name(suite), test_name(test),
-        num_threads(threads) {
-    add_benchmark(this);
-  }
-
-  Benchmark(uint64_t (*f)(uint32_t), char const *suite_name,
-            char const *test_name, uint32_t num_threads)
-      : target(BenchmarkTarget(f)), suite_name(suite_name),
-        test_name(test_name), num_threads(num_threads) {
-    add_benchmark(this);
-  }
-
-  static void run_benchmarks();
-  const cpp::string_view get_suite_name() const { return suite_name; }
-  const cpp::string_view get_test_name() const { return test_name; }
-
-protected:
-  static void add_benchmark(Benchmark *benchmark);
-
-private:
-  BenchmarkResult run() {
-    BenchmarkOptions options;
-    return benchmark(options, target);
-  }
-};
 
 template <typename T> class MathPerf {
   static LIBC_INLINE uint64_t make_seed(uint64_t base_seed, uint64_t salt) {
@@ -116,19 +80,6 @@ public:
 
 } // namespace benchmarks
 } // namespace LIBC_NAMESPACE_DECL
-
-// Passing -1 indicates the benchmark should be run with as many threads as
-// allocated by the user in the benchmark's CMake.
-#define BENCHMARK(SuiteName, TestName, Func)                                   \
-  LIBC_NAMESPACE::benchmarks::Benchmark SuiteName##_##TestName##_Instance(     \
-      Func, #SuiteName, #TestName, -1)
-
-#define BENCHMARK_N_THREADS(SuiteName, TestName, Func, NumThreads)             \
-  LIBC_NAMESPACE::benchmarks::Benchmark SuiteName##_##TestName##_Instance(     \
-      Func, #SuiteName, #TestName, NumThreads)
-
-#define SINGLE_THREADED_BENCHMARK(SuiteName, TestName, Func)                   \
-  BENCHMARK_N_THREADS(SuiteName, TestName, Func, 1)
 
 #define SINGLE_WAVE_BENCHMARK(SuiteName, TestName, Func)                       \
   BENCHMARK_N_THREADS(SuiteName, TestName, Func,                               \
