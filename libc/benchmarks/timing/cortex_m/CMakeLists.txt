@@ -1,0 +1,10 @@
+add_header_library(
+  cortex_m_timing
+  HDRS
+    timing.h
+  DEPENDS
+    libc.hdr.stdint_proxy
+    libc.src.__support.CPP.bit
+    libc.src.__support.macros.attributes
+    libc.src.__support.macros.config
+)

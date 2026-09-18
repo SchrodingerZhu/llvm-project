@@ -1,4 +1,4 @@
-//===------------- Implementation of GPU timing utils -----------*- C++ -*-===//
+//===----------------------------------------------------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,8 +6,13 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_LIBC_UTILS_GPU_TIMING_H
-#define LLVM_LIBC_UTILS_GPU_TIMING_H
+///
+/// \file
+/// Architecture dispatch for benchmark timing.
+///
+//===----------------------------------------------------------------------===//
+#ifndef LLVM_LIBC_BENCHMARKS_TIMING_H
+#define LLVM_LIBC_BENCHMARKS_TIMING_H
 
 #include "src/__support/macros/properties/architectures.h"
 
@@ -15,8 +20,10 @@
 #include "amdgpu/timing.h"
 #elif defined(LIBC_TARGET_ARCH_IS_NVPTX)
 #include "nvptx/timing.h"
+#elif defined(LIBC_TARGET_ARCH_IS_ARM)
+#include "cortex_m/timing.h"
 #else
 #error "unsupported platform"
 #endif
 
-#endif // LLVM_LIBC_UTILS_GPU_TIMING_H
+#endif // LLVM_LIBC_BENCHMARKS_TIMING_H

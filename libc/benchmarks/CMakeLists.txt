@@ -27,6 +27,7 @@ add_header_library(
 
 if(LIBC_TARGET_OS_IS_GPU OR LIBC_TARGET_OS_IS_BAREMETAL)
   include(LLVMLibCBenchmarkRules)
+  add_subdirectory(timing)
   add_benchmark_framework_library(
     LibcBenchmark
     SRCS

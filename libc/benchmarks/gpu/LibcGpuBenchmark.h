@@ -18,7 +18,7 @@
 #include "benchmarks/Benchmark.h"
 #include "benchmarks/gpu/Random.h"
 
-#include "benchmarks/gpu/timing/timing.h"
+#include "benchmarks/timing/timing.h"
 
 #include "hdr/stdint_proxy.h"
 #include "src/__support/CPP/algorithm.h"

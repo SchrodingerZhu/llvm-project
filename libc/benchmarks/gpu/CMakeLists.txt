@@ -1,5 +1,3 @@
-add_subdirectory(timing)
-
 add_custom_target(gpu-benchmark)
 
 function(add_benchmark benchmark_name)
@@ -43,7 +41,7 @@ add_benchmark_framework_library(
     Random.h
   DEPENDS
     libc.benchmarks.benchmark
-    libc.benchmarks.gpu.timing.timing
+    libc.benchmarks.timing.timing
     libc.hdr.stdint_proxy
     libc.src.__support.CPP.string
     libc.src.__support.CPP.string_view
